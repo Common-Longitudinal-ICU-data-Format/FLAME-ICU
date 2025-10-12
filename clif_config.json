@@ -1,6 +1,6 @@
 {
-    "site": "rush",
-    "data_directory": "/Users/sudo_sage/Documents/WORK/rush_clif",
-    "filetype": "parquet",
-    "timezone": "US/Central"
+    "site": "your_site_name",
+    "data_directory": "/path/clif",
+    "filetype": "parquet/csv",
+    "timezone": "US/Central - update you timezone here"
 }
