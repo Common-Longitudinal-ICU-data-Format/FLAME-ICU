@@ -93,7 +93,7 @@ Create the logs directory first: `mkdir -p logs` (Mac/Linux) or `New-Item -ItemT
 # 2. Install dependencies
 uv sync
 # 3. Run preprocessing pipeline
-uv run code/preprocessing/00_scan_tables.py
+# optional -> uv run code/preprocessing/00_scan_tables.py
 uv run code/preprocessing/01_cohort.py
 uv run code/preprocessing/02_feature_assmebly.py
 uv run code/preprocessing/03_qc_heatmap.py
