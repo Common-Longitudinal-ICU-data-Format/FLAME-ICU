@@ -445,7 +445,7 @@ def _(co, sofa_cohort_ids):
             'categories': ['map', 'spo2', 'weight_kg']
         },
         'patient_assessments': {
-            'columns': ['hospitalization_id', 'recorded_dttm', 'assessment_category', 'numerical_value'],
+            'columns': ['hospitalization_id', 'recorded_dttm', 'assessment_category', 'numerical_value','categorical_value'],
             'categories': ['gcs_total']
         },
         'medication_admin_continuous': {
