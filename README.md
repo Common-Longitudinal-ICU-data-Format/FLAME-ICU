@@ -85,6 +85,16 @@ uv run code/preprocessing/01_cohort.py 2>&1 | Tee-Object logs/cohort.log
 
 Create the logs directory first: `mkdir -p logs` (Mac/Linux) or `New-Item -ItemType Directory -Path logs` (Windows)
 
+---
+
+> **⚠️ IMPORTANT: Before Execution**
+>
+> **Visit CLIF BOX and download the `PHASE1_MODELS_UPLOAD_ME` folder, then place it in the project root directory.**
+>
+> This folder contains the necessary models required for the execution steps below.
+
+---
+
 ## Execution Guide
 
 ### Prerequisites (All Approaches)

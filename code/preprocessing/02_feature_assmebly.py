@@ -25,7 +25,7 @@ def _(mo):
     - Create event-wide dataset for the first 24 hours
     - Aggregate to one row per hospitalization with min/max/median/last values
     - Add derived features (age bins, vasopressor count, device one-hot encoding)
-    - Add temporal split column (row_type) based on admission year
+    - Add temporal split column (split_type) based on admission year and month
     - Save aggregated features for modeling
 
     ## Feature Sources
@@ -45,8 +45,9 @@ def _(mo):
     - **Derived**: Age bins, vasopressor count, isfemale
 
     ## Temporal Split
-    - **Training data**: 2018-2022 admissions
-    - **Testing data**: 2023-2024 admissions
+    - **Training data**: 2018-2022 + Jan-Jun 2023 admissions
+    - **Validation data**: Jul-Dec 2023 admissions
+    - **Testing data**: 2024+ admissions
     """
     )
     return
@@ -548,7 +549,7 @@ def _(mo):
 @app.cell
 def _(aggregated_with_sex_binary, clif, pd):
     # Add temporal split column based on admission_dttm from hospitalization table
-    print("Adding temporal split column (row_type)...")
+    print("Adding temporal split column (split_type)...")
 
     # Get hospitalization data with admission_dttm and age
     hosp_df = clif.hospitalization.df[['hospitalization_id', 'admission_dttm', 'age_at_admission']].copy()
@@ -566,38 +567,31 @@ def _(aggregated_with_sex_binary, clif, pd):
     # Rename age for clarity
     aggregated_with_admission = aggregated_with_admission.rename(columns={'age_at_admission': 'age'})
 
-    # Create temporal split based on admission year
-    # Training: 2018-2022, Testing: 2023-2024
+    # Create temporal split with validation set
+    # Training: 2018-2022 + Jan-Jun 2023, Validation: Jul-Dec 2023, Testing: 2024+
     aggregated_with_admission['admission_year'] = aggregated_with_admission['admission_dttm'].dt.year
-    aggregated_with_admission['row_type'] = aggregated_with_admission['admission_year'].apply(
-        lambda year: 'train' if 2018 <= year <= 2022 else 'test'
-    )
-
-    # Create additional split with validation set
-    # Training: 2018-2022, Validation: 2023, Testing: 2024
-    aggregated_with_admission['split_type'] = aggregated_with_admission['admission_year'].apply(
-        lambda year: 'train' if 2018 <= year <= 2022 else
-                     'val' if year == 2023 else
-                     'test'
+    aggregated_with_admission['admission_month'] = aggregated_with_admission['admission_dttm'].dt.month
+    aggregated_with_admission['split_type'] = aggregated_with_admission.apply(
+        lambda row: 'train' if (2018 <= row['admission_year'] <= 2022) or
+                               (row['admission_year'] == 2023 and row['admission_month'] <= 6) else
+                    'val' if row['admission_year'] == 2023 and row['admission_month'] >= 7 else
+                    'test',
+        axis=1
     )
 
     # Display temporal split summary
-    print("\nOriginal temporal split (row_type) summary:")
-    split_summary = aggregated_with_admission['row_type'].value_counts()
+    print("\nTemporal split (split_type) summary:")
+    split_summary = aggregated_with_admission['split_type'].value_counts()
     print(split_summary)
 
-    print("\nNew temporal split (split_type) summary:")
-    split_summary_new = aggregated_with_admission['split_type'].value_counts()
-    print(split_summary_new)
-
-    year_summary = aggregated_with_admission.groupby(['admission_year', 'row_type', 'split_type']).size().reset_index(name='count')
+    year_summary = aggregated_with_admission.groupby(['admission_year', 'split_type']).size().reset_index(name='count')
     print("\nYear breakdown:")
     print(year_summary)
 
-    # Remove intermediate columns but keep both split columns
-    aggregated_final = aggregated_with_admission.drop(columns=['admission_dttm', 'admission_year'])
+    # Remove intermediate columns but keep split column
+    aggregated_final = aggregated_with_admission.drop(columns=['admission_dttm', 'admission_year', 'admission_month'])
 
-    print("\n✅ Temporal split columns added (row_type and split_type)")
+    print("\n✅ Temporal split column added (split_type)")
     print(f"Final aggregated dataset shape: {aggregated_final.shape}")
     return (aggregated_final,)
 
@@ -715,8 +709,7 @@ def _(aggregated_standardized, np):
     # Verify no object columns remain (except identifiers and excluded columns)
     object_cols = aggregated_typed.select_dtypes(include=['object']).columns.tolist()
     expected_object_cols = ['hospitalization_id', 'sex_category', 'ethnicity_category',
-                            'race_category', 'language_category', 'row_type',
-                            'split_type', 'age_bin']
+                            'race_category', 'language_category', 'split_type', 'age_bin']
     unexpected_object_cols = [col for col in object_cols if col not in expected_object_cols]
 
     if unexpected_object_cols:
@@ -758,26 +751,26 @@ def _(aggregated_typed, get_output_path, os):
     print(f"Total features: {aggregated_typed.shape[1]}")
 
     # Show detailed temporal split
-    if 'row_type' in aggregated_typed.columns:
+    if 'split_type' in aggregated_typed.columns:
         print("\n=== Temporal Split Details ===")
-        temporal_summary = aggregated_typed.groupby('row_type').size().to_dict()
+        temporal_summary = aggregated_typed.groupby('split_type').size().to_dict()
 
         print("Hospitalizations by temporal split:")
-        for row_type, split_count in temporal_summary.items():
-            print(f"  {row_type}: {split_count:,} hospitalizations")
+        for _split_name, split_count in temporal_summary.items():
+            print(f"  {_split_name}: {split_count:,} hospitalizations")
 
         # Calculate and display prevalence percentages by temporal split
         print("\n=== Mortality Prevalence by Temporal Split ===")
 
         # Calculate prevalence by temporal split (disposition already in dataset)
-        prevalence_by_split = aggregated_typed.groupby('row_type').agg({
+        prevalence_by_split = aggregated_typed.groupby('split_type').agg({
             'disposition': ['count', 'sum', 'mean']
         }).round(3)
         prevalence_by_split.columns = ['total_patients', 'deaths', 'mortality_prevalence']
 
-        for row_type, prevalence_row in prevalence_by_split.iterrows():
+        for _split_type, prevalence_row in prevalence_by_split.iterrows():
             prevalence_pct = prevalence_row['mortality_prevalence'] * 100
-            print(f"  {row_type}: {prevalence_pct:.1f}% mortality prevalence ({int(prevalence_row['deaths'])}/{int(prevalence_row['total_patients'])} patients)")
+            print(f"  {_split_type}: {prevalence_pct:.1f}% mortality prevalence ({int(prevalence_row['deaths'])}/{int(prevalence_row['total_patients'])} patients)")
 
     # Show sample columns by category
     print("\n=== Dataset Structure ===")
@@ -787,7 +780,7 @@ def _(aggregated_typed, get_output_path, os):
     _device_cols = [col for col in aggregated_typed.columns if col.startswith('device_')]
     _age_cols = [col for col in aggregated_typed.columns if col.startswith('age_')]
     _demo_cols = ['sex_category', 'ethnicity_category', 'race_category', 'language_category']
-    _meta_cols = ['hospitalization_id', 'row_type', 'split_type', 'hour_24_start_dttm', 'hour_24_end_dttm']
+    _meta_cols = ['hospitalization_id', 'split_type', 'hour_24_start_dttm', 'hour_24_end_dttm']
 
     print(f"Aggregated features ({len(_agg_cols)}): {_agg_cols[:10]}...")
     print(f"Device one-hot ({len(_device_cols)}): {_device_cols}")
@@ -871,13 +864,9 @@ def _(aggregated_typed, json):
         "total_patients": int(len(aggregated_typed)),
         "unique_hospitalizations": int(aggregated_typed['hospitalization_id'].nunique()),
         "temporal_splits": {
-            str(split): int(count)
-            for split, count in aggregated_typed['row_type'].value_counts().items()
-        },
-        "detailed_splits": {
-            str(split): int(count)
-            for split, count in aggregated_typed['split_type'].value_counts().items()
-        } if 'split_type' in aggregated_typed.columns else {}
+            str(_s): int(count)
+            for _s, count in aggregated_typed['split_type'].value_counts().items()
+        }
     }
 
     # 2. Demographics
@@ -956,9 +945,9 @@ def _(aggregated_typed, json):
     }
 
     # Mortality by temporal split
-    for split_type in aggregated_typed['row_type'].unique():
-        split_data = aggregated_typed[aggregated_typed['row_type'] == split_type]
-        reporting_stats["outcomes"]["mortality_by_split"][str(split_type)] = {
+    for _split_val in aggregated_typed['split_type'].unique():
+        split_data = aggregated_typed[aggregated_typed['split_type'] == _split_val]
+        reporting_stats["outcomes"]["mortality_by_split"][str(_split_val)] = {
             "total": int(len(split_data)),
             "deaths": int(split_data['disposition'].sum()),
             "mortality_rate": float(split_data['disposition'].mean()),
