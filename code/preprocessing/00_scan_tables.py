@@ -15,6 +15,7 @@ Key Features:
 import os
 import sys
 import json
+import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -52,9 +53,71 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 
+def setup_logging(log_file: str = 'tables_check.log'):
+    """
+    Setup dual logging to both file and console.
+
+    Args:
+        log_file: Name of log file (will be created in project root)
+    """
+    # Get project root directory (2 levels up from this script)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    code_dir = os.path.dirname(script_dir)
+    project_root = os.path.dirname(code_dir)
+    log_path = os.path.join(project_root, log_file)
+
+    # Remove existing handlers
+    logger = logging.getLogger()
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Set root logger level
+    logger.setLevel(logging.DEBUG)
+
+    # File handler - detailed logging
+    file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+
+    # Console handler - only INFO and above
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(message)s')
+    console_handler.setFormatter(console_formatter)
+
+    # Add handlers
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    return log_path
+
+
 def print_colored(text: str, color: str = Colors.ENDC):
     """Print colored text to terminal."""
     print(f"{color}{text}{Colors.ENDC}")
+
+
+def log_and_print(message: str, level: str = 'info', color: str = None):
+    """
+    Log message to file and print to console (with optional color).
+
+    Args:
+        message: Message to log/print
+        level: Logging level ('debug', 'info', 'warning', 'error')
+        color: ANSI color code for console output (optional)
+    """
+    # Log to file
+    logger = logging.getLogger()
+    log_func = getattr(logger, level.lower(), logger.info)
+    log_func(message)
+
+    # Print to console with color (if not already printed by console handler)
+    if color and level.lower() != 'info':
+        print_colored(message, color)
 
 
 def print_header(text: str):
@@ -63,6 +126,11 @@ def print_header(text: str):
     print_colored("=" * 80, Colors.HEADER)
     print_colored(text, Colors.HEADER + Colors.BOLD)
     print_colored("=" * 80, Colors.HEADER)
+
+    # Also log header without color codes
+    logging.info("=" * 80)
+    logging.info(text)
+    logging.info("=" * 80)
 
 
 # Define ONLY the columns actually used in preprocessing
@@ -181,6 +249,8 @@ def validate_table_focused(table_class, table_name: str, config_path: str = 'cli
     Returns:
         Dict containing focused validation results
     """
+    start_time = datetime.now()
+
     result = {
         'table_name': table_name,
         'status': 'not_checked',
@@ -196,73 +266,120 @@ def validate_table_focused(table_class, table_name: str, config_path: str = 'cli
 
         # Load table with only required columns
         print(f"  Loading {table_name}", end='')
+        logging.info(f"Loading table: {table_name}")
+
         if columns_to_load:
             print(f" ({len(columns_to_load)} columns)", end='')
+            logging.debug(f"  Columns to load: {columns_to_load}")
         else:
             print(f" (all columns)", end='')
+            logging.debug(f"  Loading all columns for {table_name}")
         print("...", end='')
 
+        load_start = datetime.now()
         table_instance = table_class.from_file(
             config_path=config_path,
             columns=columns_to_load,
             sample_size=None
         )
+        load_time = (datetime.now() - load_start).total_seconds()
 
         if table_instance.df is None or len(table_instance.df) == 0:
             result['status'] = 'no_data'
             result['critical_errors'].append("No data loaded")
             print_colored(" [ERROR] No data", Colors.FAIL)
+            logging.error(f"  {table_name}: No data loaded")
             return result
 
         df = table_instance.df
         result['stats']['num_records'] = len(df)
         result['stats']['num_columns'] = len(df.columns)
+        result['stats']['load_time_seconds'] = round(load_time, 2)
+        result['stats']['memory_mb'] = round(df.memory_usage(deep=True).sum() / 1024 / 1024, 2)
+
         print_colored(f" [OK] {len(df):,} records", Colors.OKGREEN)
+        logging.info(f"  Loaded {len(df):,} records in {load_time:.2f}s")
+        logging.debug(f"  Memory usage: {result['stats']['memory_mb']:.2f} MB")
+        logging.debug(f"  Columns present: {', '.join(df.columns.tolist())}")
 
         # Validate required columns
+        logging.debug(f"  Validating required columns for {table_name}")
         missing_critical, missing_optional = validate_required_columns(df, table_name)
 
         if missing_critical:
             result['critical_errors'].append(f"Missing critical columns: {missing_critical}")
             print_colored(f"    [ERROR] Missing critical columns: {', '.join(missing_critical)}", Colors.FAIL)
+            logging.error(f"  Missing critical columns: {', '.join(missing_critical)}")
+        else:
+            logging.debug(f"  All critical columns present")
 
         if missing_optional:
             result['warnings'].append(f"Missing optional columns: {missing_optional}")
             print_colored(f"    [WARNING] Missing optional columns: {', '.join(missing_optional)}", Colors.WARNING)
+            logging.warning(f"  Missing optional columns: {', '.join(missing_optional)}")
 
         # Validate categories if applicable
+        logging.debug(f"  Validating categories for {table_name}")
         category_check = validate_categories(df, table_name)
         if category_check:
             missing_cats = category_check.get('missing', [])
+            available_cats = category_check.get('available', [])
+            required_cats = category_check.get('required', [])
+
+            logging.debug(f"  Required categories: {len(required_cats)}, Available: {len(available_cats)}, Missing: {len(missing_cats)}")
+            if available_cats:
+                logging.debug(f"  Available categories: {', '.join(available_cats[:10])}{' ...' if len(available_cats) > 10 else ''}")
+
             if missing_cats:
                 # Only critical for feature tables
                 if table_name in ['Vitals', 'Labs', 'PatientAssessments']:
                     result['critical_errors'].append(f"Missing required categories: {missing_cats[:5]}")
                     print_colored(f"    [ERROR] Missing categories: {', '.join(missing_cats[:5])}", Colors.FAIL)
+                    logging.error(f"  Missing required categories: {', '.join(missing_cats)}")
                     if len(missing_cats) > 5:
                         print_colored(f"       ... and {len(missing_cats)-5} more", Colors.FAIL)
                 else:
                     result['warnings'].append(f"Missing categories: {missing_cats[:5]}")
+                    logging.warning(f"  Missing categories: {', '.join(missing_cats)}")
 
         # Check for null values in critical columns
+        logging.debug(f"  Checking null values in critical columns")
         critical_cols = table_config.get('critical', [])
         for col in critical_cols:
             if col in df.columns:
                 null_count = df[col].isnull().sum()
                 null_pct = (null_count / len(df)) * 100
+                logging.debug(f"    {col}: {null_count:,} nulls ({null_pct:.1f}%)")
+
                 if null_pct > 50:
                     result['critical_errors'].append(f"Column '{col}' has {null_pct:.1f}% missing values")
                     print_colored(f"    [ERROR] {col}: {null_pct:.1f}% missing", Colors.FAIL)
+                    logging.error(f"  Column '{col}' has {null_pct:.1f}% missing values (critical)")
                 elif null_pct > 10:
                     result['warnings'].append(f"Column '{col}' has {null_pct:.1f}% missing values")
+                    logging.warning(f"  Column '{col}' has {null_pct:.1f}% missing values")
+
+        # Log data types for critical columns
+        logging.debug(f"  Data types for critical columns:")
+        for col in critical_cols:
+            if col in df.columns:
+                logging.debug(f"    {col}: {df[col].dtype}")
 
         # Determine overall status
         if result['critical_errors']:
             result['status'] = 'error'
+            logging.info(f"  Status: ERROR ({len(result['critical_errors'])} critical issues)")
         elif result['warnings']:
             result['status'] = 'warning'
+            logging.info(f"  Status: WARNING ({len(result['warnings'])} warnings)")
         else:
             result['status'] = 'valid'
+            logging.info(f"  Status: VALID")
+
+        # Log total validation time
+        total_time = (datetime.now() - start_time).total_seconds()
+        result['stats']['total_validation_time_seconds'] = round(total_time, 2)
+        logging.debug(f"  Total validation time: {total_time:.2f}s")
 
         # Clean up
         del table_instance
@@ -271,11 +388,13 @@ def validate_table_focused(table_class, table_name: str, config_path: str = 'cli
         result['status'] = 'not_found'
         result['critical_errors'].append("Table file not found")
         print_colored(" [ERROR] File not found", Colors.FAIL)
+        logging.error(f"  {table_name}: Table file not found")
 
     except Exception as e:
         result['status'] = 'error'
         result['critical_errors'].append(f"Load error: {str(e)}")
         print_colored(f" [ERROR] {str(e)}", Colors.FAIL)
+        logging.error(f"  {table_name}: Load error - {str(e)}")
 
     return result
 
@@ -317,6 +436,12 @@ def check_pipeline_readiness(results: List[Dict]) -> Dict[str, bool]:
 
 def main():
     """Main execution function."""
+    # Setup logging first
+    log_path = setup_logging('tables_check.log')
+
+    # Record start time
+    script_start_time = datetime.now()
+
     # Define tables to validate
     TABLES_TO_VALIDATE = [
         (Patient, 'Patient'),
@@ -331,6 +456,8 @@ def main():
 
     print_header("CLIF TABLE VALIDATION - PREPROCESSING FOCUSED")
     print_colored("Validating only columns required for preprocessing pipeline", Colors.OKBLUE)
+    logging.info("Validating only columns required for preprocessing pipeline")
+    logging.info(f"Log file: {log_path}")
 
     # Load config
     try:
@@ -339,18 +466,32 @@ def main():
         print(f"\nSite: {config.get('site', 'unknown')}")
         print(f"Data: {config.get('data_directory', 'unknown')}")
         print(f"Type: {config.get('filetype', 'unknown')}")
+
+        logging.info(f"Site: {config.get('site', 'unknown')}")
+        logging.info(f"Data directory: {config.get('data_directory', 'unknown')}")
+        logging.info(f"File type: {config.get('filetype', 'unknown')}")
+        logging.info(f"Timezone: {config.get('timezone', 'unknown')}")
+        logging.debug(f"Full config: {json.dumps(config, indent=2)}")
     except Exception as e:
         print_colored(f"Warning: Could not load config: {e}", Colors.WARNING)
+        logging.warning(f"Could not load config: {e}")
 
     print_colored("\n" + "─" * 80, Colors.OKCYAN)
+    logging.info("─" * 80)
 
     # Validate each table
     results = []
     error_count = 0
     warning_count = 0
+    total_records = 0
+
+    logging.info(f"Starting validation of {len(TABLES_TO_VALIDATE)} tables")
 
     for i, (table_class, table_name) in enumerate(TABLES_TO_VALIDATE, 1):
         print(f"\n[{i}/{len(TABLES_TO_VALIDATE)}] {table_name}")
+        logging.info(f"\n[{i}/{len(TABLES_TO_VALIDATE)}] {table_name}")
+        logging.info("─" * 40)
+
         result = validate_table_focused(table_class, table_name)
         results.append(result)
 
@@ -358,9 +499,16 @@ def main():
             error_count += len(result['critical_errors'])
         if result['warnings']:
             warning_count += len(result['warnings'])
+        if result.get('stats', {}).get('num_records'):
+            total_records += result['stats']['num_records']
+
+    # Calculate total execution time
+    total_execution_time = (datetime.now() - script_start_time).total_seconds()
 
     # Summary
     print_header("VALIDATION SUMMARY")
+    logging.info("")
+    logging.info("=" * 80)
 
     # Count statuses
     valid_tables = sum(1 for r in results if r['status'] == 'valid')
@@ -372,45 +520,86 @@ def main():
     print(f"[WARNING] Warnings: {warning_tables}/{len(results)} tables ({warning_count} issues)")
     print(f"[ERROR] Errors: {error_tables}/{len(results)} tables ({error_count} critical issues)")
 
+    logging.info(f"VALIDATION SUMMARY")
+    logging.info(f"Valid tables: {valid_tables}/{len(results)}")
+    logging.info(f"Tables with warnings: {warning_tables}/{len(results)} ({warning_count} total warnings)")
+    logging.info(f"Tables with errors: {error_tables}/{len(results)} ({error_count} critical errors)")
+
     if not_found_tables > 0:
         print(f"[INFO] Not Found: {not_found_tables} tables")
+        logging.info(f"Tables not found: {not_found_tables}")
+
+    # Log detailed statistics
+    logging.info("")
+    logging.info("DETAILED STATISTICS:")
+    logging.info(f"Total execution time: {total_execution_time:.2f}s")
+    logging.info(f"Total records processed: {total_records:,}")
+
+    # Log per-table statistics
+    logging.debug("")
+    logging.debug("PER-TABLE STATISTICS:")
+    for r in results:
+        if r.get('stats'):
+            stats = r['stats']
+            logging.debug(f"  {r['table_name']}:")
+            logging.debug(f"    Records: {stats.get('num_records', 'N/A'):,}")
+            logging.debug(f"    Columns: {stats.get('num_columns', 'N/A')}")
+            logging.debug(f"    Load time: {stats.get('load_time_seconds', 'N/A')}s")
+            logging.debug(f"    Memory: {stats.get('memory_mb', 'N/A')} MB")
+            logging.debug(f"    Status: {r['status']}")
 
     # Pipeline readiness
     print_colored("\n" + "─" * 80, Colors.OKCYAN)
     print_colored("PREPROCESSING PIPELINE READINESS", Colors.BOLD)
     print()
 
+    logging.info("")
+    logging.info("─" * 80)
+    logging.info("PREPROCESSING PIPELINE READINESS")
+    logging.info("")
+
     readiness = check_pipeline_readiness(results)
 
     # 01_cohort.py readiness
     if readiness['cohort_generation']:
         print_colored("[OK] 01_cohort.py - Cohort Generation: READY", Colors.OKGREEN)
+        logging.info("01_cohort.py - Cohort Generation: READY")
     else:
         print_colored("[ERROR] 01_cohort.py - Cohort Generation: NOT READY", Colors.FAIL)
+        logging.error("01_cohort.py - Cohort Generation: NOT READY")
         # Show which tables are blocking
         cohort_tables = ['Patient', 'Hospitalization', 'Adt']
         for t in cohort_tables:
             for r in results:
                 if r['table_name'] == t and r['status'] in ['error', 'not_found']:
+                    msg = f"  Blocking table: {t} - {r['critical_errors'][0] if r['critical_errors'] else 'Not found'}"
                     print(f"     └─ {t}: {r['critical_errors'][0] if r['critical_errors'] else 'Not found'}")
+                    logging.error(msg)
 
     if readiness['sofa_calculation']:
         print_colored("[OK] 01_cohort.py - SOFA Calculation: READY", Colors.OKGREEN)
+        logging.info("01_cohort.py - SOFA Calculation: READY")
     else:
         print_colored("[WARNING] 01_cohort.py - SOFA Calculation: PARTIAL", Colors.WARNING)
+        logging.warning("01_cohort.py - SOFA Calculation: PARTIAL")
         print("     └─ SOFA scores may be incomplete due to missing tables")
+        logging.warning("  SOFA scores may be incomplete due to missing tables")
 
     # 02_feature_assmebly.py readiness
     if readiness['feature_extraction']:
         print_colored("[OK] 02_feature_assmebly.py - Feature Extraction: READY", Colors.OKGREEN)
+        logging.info("02_feature_assmebly.py - Feature Extraction: READY")
     else:
         print_colored("[ERROR] 02_feature_assmebly.py - Feature Extraction: NOT READY", Colors.FAIL)
+        logging.error("02_feature_assmebly.py - Feature Extraction: NOT READY")
         # Show which tables are blocking
         feature_tables = ['Vitals', 'Labs', 'RespiratorySupport', 'MedicationAdminContinuous', 'PatientAssessments', 'Hospitalization']
         for t in feature_tables:
             for r in results:
                 if r['table_name'] == t and r['status'] in ['error', 'not_found']:
+                    msg = f"  Blocking table: {t} - {r['critical_errors'][0] if r['critical_errors'] else 'Not found'}"
                     print(f"     └─ {t}: {r['critical_errors'][0] if r['critical_errors'] else 'Not found'}")
+                    logging.error(msg)
 
     # Critical issues summary
     if error_count > 0:
@@ -418,13 +607,35 @@ def main():
         print_colored("[WARNING] CRITICAL ISSUES TO RESOLVE", Colors.FAIL + Colors.BOLD)
         print()
 
+        logging.info("")
+        logging.info("─" * 80)
+        logging.info("CRITICAL ISSUES TO RESOLVE")
+        logging.info("")
+
         for r in results:
             if r['critical_errors']:
                 print_colored(f"• {r['table_name']}:", Colors.FAIL)
+                logging.error(f"{r['table_name']} critical errors:")
                 for error in r['critical_errors'][:3]:  # Show max 3 errors per table
                     print(f"  - {error}")
+                    logging.error(f"  - {error}")
+                # Log all errors to file (not just first 3)
+                if len(r['critical_errors']) > 3:
+                    for error in r['critical_errors'][3:]:
+                        logging.error(f"  - {error}")
 
     print_colored("\n" + "=" * 80, Colors.HEADER)
+
+    # Final summary to log
+    logging.info("")
+    logging.info("=" * 80)
+    logging.info("VALIDATION COMPLETE")
+    logging.info(f"Execution time: {total_execution_time:.2f}s")
+    logging.info(f"Exit code: {1 if (error_tables > 0 or not_found_tables > 0) else 0}")
+    logging.info("=" * 80)
+
+    # Inform user about log location
+    print(f"\nDetailed log saved to: {log_path}")
 
     # Return exit code
     if error_tables > 0 or not_found_tables > 0:
