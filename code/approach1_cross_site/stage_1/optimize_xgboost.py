@@ -205,7 +205,7 @@ def main():
     # Save results
     save_optimization_results(study, 'xgboost', feature_cols)
 
-    print(f"\n✅ XGBoost optimization completed!")
+    print(f"\n[OK] XGBoost optimization completed!")
     print(f"Use the saved parameters to update approach_1_config.json")
 
 

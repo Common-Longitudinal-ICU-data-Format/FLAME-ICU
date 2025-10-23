@@ -138,7 +138,7 @@ def _(adt_df, hosp_df, pd):
     icu_data.loc[icu_data['location_category'] == 'procedural', 'location_category'] = 'OR'
     icu_data['location_category'] = icu_data['location_category'].str.upper()
 
-    print("✅ Data preparation completed")
+    print("[OK] Data preparation completed")
     return (icu_data,)
 
 
@@ -252,7 +252,7 @@ def _(icu_data_grouped, pd):
     # Select required columns
     icu_data_final = icu_data_final[['patient_id', 'hospitalization_id', 'min_in_dttm', 'max_out_dttm', 'after_24hr', 'age', 'dispo']]
 
-    print("✅ ICU cohort criteria applied")
+    print("[OK] ICU cohort criteria applied")
     return (icu_data_final,)
 
 
@@ -323,7 +323,7 @@ def _(icu_data_final, patient_df, pd):
     print(f"\nLanguage distribution after grouping:")
     print(icu_data_demo['language_category'].value_counts())
 
-    print("✅ Demographic standardization completed")
+    print("[OK] Demographic standardization completed")
 
     # Filter out records with missing demographics (data quality)
     demographic_cols = ['sex_category', 'ethnicity_category', 'race_category']
@@ -372,7 +372,7 @@ def _(icu_data_demo):
         'language_category'
     ]]
 
-    print(f"✅ Final cohort created: {len(cohort_final)} hospitalizations")
+    print(f"[OK] Final cohort created: {len(cohort_final)} hospitalizations")
     print(f"Mortality prevalence: {cohort_final['disposition'].mean()*100:.1f}%")
     return (cohort_final,)
 
@@ -394,7 +394,7 @@ def _(ClifOrchestrator):
     # Initialize ClifOrchestrator with config file
     print("Initializing ClifOrchestrator for SOFA computation...")
     co = ClifOrchestrator(config_path='clif_config.json')
-    print("✅ ClifOrchestrator initialized")
+    print("[OK] ClifOrchestrator initialized")
     return (co,)
 
 
@@ -485,7 +485,7 @@ def _(co, sofa_cohort_ids):
             columns=table_cols
         )
 
-    print("✅ All required tables loaded for SOFA computation with category filters")
+    print("[OK] All required tables loaded for SOFA computation with category filters")
     return
 
 
@@ -517,7 +517,7 @@ def _(co):
     # Update the table
     co.medication_admin_continuous.df = med_df
 
-    print(f"✅ Medication data cleaned: {initial_count:,} → {final_count:,} records ({initial_count - final_count:,} removed, {100*(initial_count - final_count)/initial_count:.1f}% reduction)")
+    print(f"[OK] Medication data cleaned: {initial_count:,} -> {final_count:,} records ({initial_count - final_count:,} removed, {100*(initial_count - final_count)/initial_count:.1f}% reduction)")
     return
 
 
@@ -558,13 +558,13 @@ def _(co):
     # Show any failed conversions
     failed_conversions = conversion_counts[conversion_counts['_convert_status'] != 'success']
     if len(failed_conversions) > 0:
-        print(f"\n⚠️ Found {len(failed_conversions)} conversion issues:")
+        print(f"\n[WARNING] Found {len(failed_conversions)} conversion issues:")
         for _, row in failed_conversions.head(10).iterrows():
-            print(f"  {row['med_category']}: {row['_clean_unit']} → {row['_convert_status']} ({row['count']} records)")
+            print(f"  {row['med_category']}: {row['_clean_unit']} -> {row['_convert_status']} ({row['count']} records)")
     else:
-        print("✅ All conversions successful!")
+        print("[OK] All conversions successful!")
 
-    print("\n✅ Medication unit conversion completed")
+    print("\n[OK] Medication unit conversion completed")
     return
 
 
@@ -576,7 +576,7 @@ def _(co, sofa_cohort_df):
         cohort_df=sofa_cohort_df,
         id_name='hospitalization_id'
     )
-    print(f"✅ SOFA scores computed: {sofa_scores.shape}")
+    print(f"[OK] SOFA scores computed: {sofa_scores.shape}")
     print(f"SOFA columns: {[col for col in sofa_scores.columns if 'sofa' in col.lower()]}")
     return (sofa_scores,)
 
@@ -593,7 +593,7 @@ def _(cohort_final, pd, sofa_scores):
         how='left'
     )
 
-    print(f"✅ Cohort with SOFA scores: {cohort_with_sofa.shape}")
+    print(f"[OK] Cohort with SOFA scores: {cohort_with_sofa.shape}")
     print(f"Total columns: {len(cohort_with_sofa.columns)}")
     return (cohort_with_sofa,)
 
@@ -640,7 +640,7 @@ def _(cohort_with_sofa, ensure_dir, get_output_path, json, os):
 
     cohort_with_sofa.to_parquet(output_path, index=False)
 
-    print(f"✅ Cohort saved to: {output_path}")
+    print(f"[OK] Cohort saved to: {output_path}")
     print(f"File size: {os.path.getsize(output_path) / 1024:.1f} KB")
     print(f"Shape: {cohort_with_sofa.shape}")
 
@@ -661,8 +661,8 @@ def _(cohort_with_sofa, ensure_dir, get_output_path, json, os):
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)
 
-    print(f"✅ Metadata saved to: {metadata_path}")
-    print("\n🎉 Cohort generation completed successfully!")
+    print(f"[OK] Metadata saved to: {metadata_path}")
+    print("\n[SUCCESS] Cohort generation completed successfully!")
     return
 
 

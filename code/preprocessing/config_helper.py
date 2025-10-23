@@ -45,7 +45,7 @@ def load_config():
     if os.path.exists(config_path):
         with open(config_path, 'r') as file:
             config = json.load(file)
-        print(f"✅ Loaded configuration from {config_path}")
+        print(f"[OK] Loaded configuration from {config_path}")
         return config
     else:
         raise FileNotFoundError(f"Configuration file not found. Tried: {config_path}")

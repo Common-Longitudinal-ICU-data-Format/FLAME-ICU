@@ -82,39 +82,39 @@ def main():
 
     try:
         # Step 1: Load base models from Approach 1
-        print("📥 STEP 1: Loading pre-trained base models")
+        print("STEP 1: Loading pre-trained base models")
         print("-" * 50)
         xgb_base, nn_base, base_feature_names = load_base_models(config)
         print()
 
         # Step 2: Load and preprocess local data
-        print("📊 STEP 2: Loading and preprocessing local data")
+        print("STEP 2: Loading and preprocessing local data")
         print("-" * 50)
         splits, feature_names = load_and_preprocess_data(config)
-        print(f"✅ Data loaded successfully with {len(feature_names)} features")
+        print(f"[OK] Data loaded successfully with {len(feature_names)} features")
         print()
 
         # Verify feature consistency
         if feature_names != base_feature_names:
-            print("⚠️  WARNING: Feature names differ from base model")
+            print("[WARNING] Feature names differ from base model")
             print("Ensure feature alignment for proper transfer learning")
 
         # Step 3: Fine-tune XGBoost model
-        print("🌳 STEP 3: Fine-tuning XGBoost model")
+        print("STEP 3: Fine-tuning XGBoost model")
         print("-" * 50)
         xgb_model, xgb_evals = fine_tune_xgboost(xgb_base, splits, config, feature_names)
-        print("✅ XGBoost fine-tuning completed")
+        print("[OK] XGBoost fine-tuning completed")
         print()
 
         # Step 4: Fine-tune Neural Network model
-        print("🧠 STEP 4: Fine-tuning Neural Network model")
+        print("STEP 4: Fine-tuning Neural Network model")
         print("-" * 50)
         nn_model, nn_history = fine_tune_nn(nn_base, splits, config, feature_names)
-        print("✅ Neural Network fine-tuning completed")
+        print("[OK] Neural Network fine-tuning completed")
         print()
 
         # Step 5: Evaluate fine-tuned models on validation set
-        print("📈 STEP 5: Evaluating fine-tuned models on validation set")
+        print("STEP 5: Evaluating fine-tuned models on validation set")
         print("-" * 50)
 
         print("Evaluating XGBoost model...")
@@ -125,7 +125,7 @@ def main():
         print()
 
         # Step 6: Save fine-tuned model artifacts
-        print("💾 STEP 6: Saving fine-tuned model artifacts")
+        print("STEP 6: Saving fine-tuned model artifacts")
         print("-" * 50)
 
         xgb_model_dir = save_model_artifacts(
@@ -138,7 +138,7 @@ def main():
         print()
 
         # Step 7: Run inference on test set
-        print("🔬 STEP 7: Running inference on test set")
+        print("STEP 7: Running inference on test set")
         print("-" * 50)
 
         # Package models for inference (match Approach 1 format)
@@ -163,27 +163,27 @@ def main():
         print()
 
         # Step 8: Calculate detailed metrics
-        print("📊 STEP 8: Creating comprehensive evaluation results")
+        print("STEP 8: Creating comprehensive evaluation results")
         print("-" * 50)
 
         detailed_results = calculate_detailed_metrics(y_test, results, config)
         print()
 
         # Step 9: Save inference results (includes plots)
-        print("💾 STEP 9: Saving inference results and plots")
+        print("STEP 9: Saving inference results and plots")
         print("-" * 50)
 
         save_inference_results(detailed_results, y_test, results, config)
         print()
 
         # Step 10: Create summary report
-        print("📋 STEP 10: Creating summary report")
+        print("STEP 10: Creating summary report")
         print("-" * 50)
         create_summary_report(config, xgb_results, nn_results, detailed_results, site_name, feature_names)
         print()
 
         print("=" * 80)
-        print("🎉 TRANSFER LEARNING COMPLETED SUCCESSFULLY")
+        print("[SUCCESS] TRANSFER LEARNING COMPLETED SUCCESSFULLY")
         print("=" * 80)
         print(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print()
@@ -195,10 +195,10 @@ def main():
         print(f"Models saved to: {os.path.join(config['output_paths']['models_dir'], site_name)}")
         print(f"Results saved to: {config['output_paths']['results_dir']}")
         print()
-        print("✅ Ready for Stage 2 cross-site testing")
+        print("[OK] Ready for Stage 2 cross-site testing")
 
     except Exception as e:
-        print(f"❌ ERROR: Transfer learning failed with error: {str(e)}")
+        print(f"[ERROR] Transfer learning failed with error: {str(e)}")
         import traceback
         traceback.print_exc()
         raise
@@ -278,7 +278,7 @@ def create_summary_report(config, xgb_results, nn_results, detailed_results, sit
     with open(summary_path, 'w') as f:
         json.dump(summary, f, indent=2)
 
-    print(f"✅ Summary saved to: {summary_path}")
+    print(f"[OK] Summary saved to: {summary_path}")
 
 
 if __name__ == "__main__":

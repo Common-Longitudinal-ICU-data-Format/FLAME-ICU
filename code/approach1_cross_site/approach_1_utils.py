@@ -102,7 +102,7 @@ def prepare_features(df, config):
         missing_features = [col for col in feature_cols if col not in df.columns]
 
         if missing_features:
-            print(f"⚠️  Warning: {len(missing_features)} features from config not found in data:")
+            print(f"[WARNING] {len(missing_features)} features from config not found in data:")
             print(f"  {missing_features[:10]}{'...' if len(missing_features) > 10 else ''}")
 
         feature_cols = available_features
@@ -154,7 +154,7 @@ def apply_missing_value_handling(X, config, model_type):
         # Ensure all columns are numeric (convert if possible, error if not)
         non_numeric_cols = X_filled.select_dtypes(include=['object']).columns.tolist()
         if non_numeric_cols:
-            print(f"⚠️  Converting {len(non_numeric_cols)} object columns to numeric: {non_numeric_cols[:5]}...")
+            print(f"[WARNING] Converting {len(non_numeric_cols)} object columns to numeric: {non_numeric_cols[:5]}...")
             for col in non_numeric_cols:
                 try:
                     X_filled[col] = pd.to_numeric(X_filled[col], errors='raise')
@@ -262,7 +262,7 @@ def extract_xgboost_feature_importance(model, feature_names):
         importance_list.sort(key=lambda x: x['importance'], reverse=True)
         importance_dict[imp_type] = importance_list
 
-    print(f"✅ Extracted importance for {len(importance_dict['weight'])} features")
+    print(f"[OK] Extracted importance for {len(importance_dict['weight'])} features")
     return importance_dict
 
 
@@ -326,7 +326,7 @@ def calculate_permutation_importance(model, X, y, config, feature_names, n_repea
     # Sort by importance descending
     importances.sort(key=lambda x: x['importance'], reverse=True)
 
-    print(f"✅ Calculated permutation importance for {len(importances)} features")
+    print(f"[OK] Calculated permutation importance for {len(importances)} features")
     return importances
 
 
@@ -345,7 +345,7 @@ def save_feature_importance(importance_data, model_type, config):
     with open(output_path, 'w') as f:
         json.dump(importance_data, f, indent=2)
 
-    print(f"✅ Feature importance saved to: {output_path}")
+    print(f"[OK] Feature importance saved to: {output_path}")
     return output_path
 
 
@@ -415,7 +415,7 @@ def plot_feature_importance(importance_data, model_type, config, top_n=20):
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"✅ Feature importance plot saved to: {output_path}")
+    print(f"[OK] Feature importance plot saved to: {output_path}")
     return output_path
 
 
@@ -710,7 +710,7 @@ def calculate_bootstrap_confidence_intervals(y_true, y_pred_proba, y_pred, confi
             ci_results[f'{metric_name}_ci_lower'] = np.nan
             ci_results[f'{metric_name}_ci_upper'] = np.nan
 
-    print(f"  ✅ Bootstrap CIs calculated ({len(bootstrap_results['roc_auc'])} valid iterations)")
+    print(f"  [OK] Bootstrap CIs calculated ({len(bootstrap_results['roc_auc'])} valid iterations)")
     return ci_results
 
 

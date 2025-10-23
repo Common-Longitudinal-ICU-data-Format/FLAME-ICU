@@ -62,21 +62,21 @@ def main():
 
     try:
         # Step 1: Load and preprocess data
-        print("📊 STEP 1: Loading and preprocessing data")
+        print("STEP 1: Loading and preprocessing data")
         print("-" * 50)
         splits, feature_names = load_and_preprocess_data(config)
-        print(f"✅ Data loaded successfully with {len(feature_names)} features")
+        print(f"[OK] Data loaded successfully with {len(feature_names)} features")
         print()
 
         # Step 2: Train XGBoost model
-        print("🌳 STEP 2: Training XGBoost model")
+        print("STEP 2: Training XGBoost model")
         print("-" * 50)
         xgb_model, xgb_evals = train_xgboost_approach1(splits, config, feature_names)
-        print("✅ XGBoost training completed")
+        print("[OK] XGBoost training completed")
         print()
 
         # Step 2a: Extract XGBoost feature importance
-        print("📊 STEP 2a: Extracting XGBoost feature importance")
+        print("STEP 2a: Extracting XGBoost feature importance")
         print("-" * 50)
         xgb_importance = extract_xgboost_feature_importance(xgb_model, feature_names)
         save_feature_importance(xgb_importance, 'xgboost', config)
@@ -84,14 +84,14 @@ def main():
         print()
 
         # Step 3: Train Neural Network model
-        print("🧠 STEP 3: Training Neural Network model")
+        print("STEP 3: Training Neural Network model")
         print("-" * 50)
         nn_model, nn_history = train_nn_approach1(splits, config, feature_names)
-        print("✅ Neural Network training completed")
+        print("[OK] Neural Network training completed")
         print()
 
         # Step 3a: Calculate NN feature importance
-        print("📊 STEP 3a: Calculating Neural Network feature importance")
+        print("STEP 3a: Calculating Neural Network feature importance")
         print("-" * 50)
         nn_importance = calculate_permutation_importance(
             nn_model, splits['val']['features'], splits['val']['target'],
@@ -102,7 +102,7 @@ def main():
         print()
 
         # Step 4: Evaluate models on validation set
-        print("📈 STEP 4: Evaluating models on validation set")
+        print("STEP 4: Evaluating models on validation set")
         print("-" * 50)
 
         print("Evaluating XGBoost model...")
@@ -113,7 +113,7 @@ def main():
         print()
 
         # Step 5: Save model artifacts
-        print("💾 STEP 5: Saving model artifacts")
+        print("STEP 5: Saving model artifacts")
         print("-" * 50)
 
         # Save XGBoost model (no transformer needed since data is pre-scaled)
@@ -128,13 +128,13 @@ def main():
         print()
 
         # Step 6: Create summary report
-        print("📋 STEP 6: Creating summary report")
+        print("STEP 6: Creating summary report")
         print("-" * 50)
         create_summary_report(config, xgb_results, nn_results, feature_names, xgb_importance, nn_importance)
         print()
 
         print("=" * 80)
-        print("🎉 TRAINING COMPLETED SUCCESSFULLY")
+        print("[SUCCESS] TRAINING COMPLETED SUCCESSFULLY")
         print("=" * 80)
         print(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print()
@@ -149,7 +149,7 @@ def main():
         print(f"Neural Network model: {nn_model_dir}")
 
     except Exception as e:
-        print(f"❌ ERROR: Training failed with error: {str(e)}")
+        print(f"[ERROR] Training failed with error: {str(e)}")
         raise
 
 
@@ -216,7 +216,7 @@ def create_summary_report(config, xgb_results, nn_results, feature_names, xgb_im
     with open(summary_path, 'w') as f:
         json.dump(summary, f, indent=2)
 
-    print(f"✅ Summary saved to: {summary_path}")
+    print(f"[OK] Summary saved to: {summary_path}")
 
 
 if __name__ == "__main__":

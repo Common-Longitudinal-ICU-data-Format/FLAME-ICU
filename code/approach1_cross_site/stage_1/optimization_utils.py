@@ -151,7 +151,7 @@ def save_optimization_results(study, model_type, feature_cols):
     with open(results_path, 'w') as f:
         json.dump(optimization_results, f, indent=2)
 
-    print(f"✅ Optimization results saved to: {results_path}")
+    print(f"[OK] Optimization results saved to: {results_path}")
     print(f"Best score: {study.best_value:.4f}")
     print(f"Best parameters: {best_params}")
 
@@ -189,8 +189,8 @@ def verify_no_test_contamination(splits):
     assert 'train' in splits, "ERROR: Train split missing from optimization data"
     assert 'val' in splits, "ERROR: Validation split missing from optimization data"
 
-    print("✓ Safety check passed: No test data contamination")
-    print("✓ Optimization is honest: using only train and validation data")
+    print("[OK] Safety check passed: No test data contamination")
+    print("[OK] Optimization is honest: using only train and validation data")
     return True
 
 

@@ -152,7 +152,7 @@ def load_trained_models(config):
         'feature_names': feature_names
     }
 
-    print("✅ All models loaded successfully")
+    print("[OK] All models loaded successfully")
     return models
 
 
@@ -421,7 +421,7 @@ def save_inference_results(detailed_results, y_test, results, config, site_name)
     with open(summary_path, 'w') as f:
         json.dump(summary, f, indent=2)
 
-    print(f"✅ Results saved to: {results_dir}")
+    print(f"[OK] Results saved to: {results_dir}")
     print(f"  - Metrics: {metrics_path}")
     print(f"  - Summary: {summary_path}")
     print(f"  - Plots: {plots_dir}")
@@ -460,7 +460,7 @@ def plot_roc_curves(detailed_results, site_name, plots_dir):
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✅ ROC curves saved: {plot_path}")
+    print(f"  [OK] ROC curves saved: {plot_path}")
 
 
 def plot_calibration_curves(y_test, results, site_name, plots_dir):
@@ -499,7 +499,7 @@ def plot_calibration_curves(y_test, results, site_name, plots_dir):
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✅ Calibration curves saved: {plot_path}")
+    print(f"  [OK] Calibration curves saved: {plot_path}")
 
 
 def main():
@@ -527,38 +527,38 @@ def main():
 
     try:
         # Step 1: Load trained models
-        print("📥 STEP 1: Loading trained models")
+        print("STEP 1: Loading trained models")
         print("-" * 50)
         models = load_trained_models(config)
         feature_names = models['xgboost']['feature_names']
         print()
 
         # Step 2: Load test data
-        print("📊 STEP 2: Loading test data")
+        print("STEP 2: Loading test data")
         print("-" * 50)
         X_test, y_test, test_ids = load_test_data(config, feature_names)
         print()
 
         # Step 3: Run inference
-        print("🔮 STEP 3: Running inference")
+        print("STEP 3: Running inference")
         print("-" * 50)
         results = run_inference(models, X_test, y_test, test_ids, config)
         print()
 
         # Step 4: Calculate detailed metrics
-        print("📈 STEP 4: Calculating detailed metrics")
+        print("STEP 4: Calculating detailed metrics")
         print("-" * 50)
         detailed_results = calculate_detailed_metrics(y_test, results, config)
         print()
 
         # Step 5: Save results
-        print("💾 STEP 5: Saving inference results")
+        print("STEP 5: Saving inference results")
         print("-" * 50)
         results_dir = save_inference_results(detailed_results, y_test, results, config, site_name)
         print()
 
         print("=" * 80)
-        print("🎉 INFERENCE COMPLETED SUCCESSFULLY")
+        print("[SUCCESS] INFERENCE COMPLETED SUCCESSFULLY")
         print("=" * 80)
         print(f"Site: {site_name}")
         print(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -570,7 +570,7 @@ def main():
         print(f"Upload results to BOX: PHASE1_RESULTS_UPLOAD_ME/approach_3_stage_1/{site_name}/")
 
     except Exception as e:
-        print(f"❌ ERROR: Inference failed with error: {str(e)}")
+        print(f"[ERROR] ERROR: Inference failed with error: {str(e)}")
         raise
 
 

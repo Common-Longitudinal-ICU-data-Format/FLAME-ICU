@@ -310,7 +310,7 @@ def main():
     # Save results
     save_optimization_results(study, 'nn', feature_cols)
 
-    print(f"\n✅ Neural Network optimization completed!")
+    print(f"\n[OK] Neural Network optimization completed!")
     print(f"Use the saved parameters to update approach_1_config.json")
 
 

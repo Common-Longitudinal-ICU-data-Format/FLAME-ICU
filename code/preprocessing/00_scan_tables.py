@@ -211,24 +211,24 @@ def validate_table_focused(table_class, table_name: str, config_path: str = 'cli
         if table_instance.df is None or len(table_instance.df) == 0:
             result['status'] = 'no_data'
             result['critical_errors'].append("No data loaded")
-            print_colored(" ❌ No data", Colors.FAIL)
+            print_colored(" [ERROR] No data", Colors.FAIL)
             return result
 
         df = table_instance.df
         result['stats']['num_records'] = len(df)
         result['stats']['num_columns'] = len(df.columns)
-        print_colored(f" ✅ {len(df):,} records", Colors.OKGREEN)
+        print_colored(f" [OK] {len(df):,} records", Colors.OKGREEN)
 
         # Validate required columns
         missing_critical, missing_optional = validate_required_columns(df, table_name)
 
         if missing_critical:
             result['critical_errors'].append(f"Missing critical columns: {missing_critical}")
-            print_colored(f"    ❌ Missing critical columns: {', '.join(missing_critical)}", Colors.FAIL)
+            print_colored(f"    [ERROR] Missing critical columns: {', '.join(missing_critical)}", Colors.FAIL)
 
         if missing_optional:
             result['warnings'].append(f"Missing optional columns: {missing_optional}")
-            print_colored(f"    ⚠️  Missing optional columns: {', '.join(missing_optional)}", Colors.WARNING)
+            print_colored(f"    [WARNING] Missing optional columns: {', '.join(missing_optional)}", Colors.WARNING)
 
         # Validate categories if applicable
         category_check = validate_categories(df, table_name)
@@ -238,7 +238,7 @@ def validate_table_focused(table_class, table_name: str, config_path: str = 'cli
                 # Only critical for feature tables
                 if table_name in ['Vitals', 'Labs', 'PatientAssessments']:
                     result['critical_errors'].append(f"Missing required categories: {missing_cats[:5]}")
-                    print_colored(f"    ❌ Missing categories: {', '.join(missing_cats[:5])}", Colors.FAIL)
+                    print_colored(f"    [ERROR] Missing categories: {', '.join(missing_cats[:5])}", Colors.FAIL)
                     if len(missing_cats) > 5:
                         print_colored(f"       ... and {len(missing_cats)-5} more", Colors.FAIL)
                 else:
@@ -252,7 +252,7 @@ def validate_table_focused(table_class, table_name: str, config_path: str = 'cli
                 null_pct = (null_count / len(df)) * 100
                 if null_pct > 50:
                     result['critical_errors'].append(f"Column '{col}' has {null_pct:.1f}% missing values")
-                    print_colored(f"    ❌ {col}: {null_pct:.1f}% missing", Colors.FAIL)
+                    print_colored(f"    [ERROR] {col}: {null_pct:.1f}% missing", Colors.FAIL)
                 elif null_pct > 10:
                     result['warnings'].append(f"Column '{col}' has {null_pct:.1f}% missing values")
 
@@ -270,12 +270,12 @@ def validate_table_focused(table_class, table_name: str, config_path: str = 'cli
     except FileNotFoundError:
         result['status'] = 'not_found'
         result['critical_errors'].append("Table file not found")
-        print_colored(" ❌ File not found", Colors.FAIL)
+        print_colored(" [ERROR] File not found", Colors.FAIL)
 
     except Exception as e:
         result['status'] = 'error'
         result['critical_errors'].append(f"Load error: {str(e)}")
-        print_colored(f" ❌ Error: {str(e)}", Colors.FAIL)
+        print_colored(f" [ERROR] {str(e)}", Colors.FAIL)
 
     return result
 
@@ -336,9 +336,9 @@ def main():
     try:
         with open('clif_config.json', 'r') as f:
             config = json.load(f)
-        print(f"\n📍 Site: {config.get('site', 'unknown')}")
-        print(f"📁 Data: {config.get('data_directory', 'unknown')}")
-        print(f"📄 Type: {config.get('filetype', 'unknown')}")
+        print(f"\nSite: {config.get('site', 'unknown')}")
+        print(f"Data: {config.get('data_directory', 'unknown')}")
+        print(f"Type: {config.get('filetype', 'unknown')}")
     except Exception as e:
         print_colored(f"Warning: Could not load config: {e}", Colors.WARNING)
 
@@ -368,12 +368,12 @@ def main():
     error_tables = sum(1 for r in results if r['status'] == 'error')
     not_found_tables = sum(1 for r in results if r['status'] == 'not_found')
 
-    print(f"✅ Valid: {valid_tables}/{len(results)} tables")
-    print(f"⚠️  Warnings: {warning_tables}/{len(results)} tables ({warning_count} issues)")
-    print(f"❌ Errors: {error_tables}/{len(results)} tables ({error_count} critical issues)")
+    print(f"[OK] Valid: {valid_tables}/{len(results)} tables")
+    print(f"[WARNING] Warnings: {warning_tables}/{len(results)} tables ({warning_count} issues)")
+    print(f"[ERROR] Errors: {error_tables}/{len(results)} tables ({error_count} critical issues)")
 
     if not_found_tables > 0:
-        print(f"❓ Not Found: {not_found_tables} tables")
+        print(f"[INFO] Not Found: {not_found_tables} tables")
 
     # Pipeline readiness
     print_colored("\n" + "─" * 80, Colors.OKCYAN)
@@ -384,9 +384,9 @@ def main():
 
     # 01_cohort.py readiness
     if readiness['cohort_generation']:
-        print_colored("✅ 01_cohort.py - Cohort Generation: READY", Colors.OKGREEN)
+        print_colored("[OK] 01_cohort.py - Cohort Generation: READY", Colors.OKGREEN)
     else:
-        print_colored("❌ 01_cohort.py - Cohort Generation: NOT READY", Colors.FAIL)
+        print_colored("[ERROR] 01_cohort.py - Cohort Generation: NOT READY", Colors.FAIL)
         # Show which tables are blocking
         cohort_tables = ['Patient', 'Hospitalization', 'Adt']
         for t in cohort_tables:
@@ -395,16 +395,16 @@ def main():
                     print(f"     └─ {t}: {r['critical_errors'][0] if r['critical_errors'] else 'Not found'}")
 
     if readiness['sofa_calculation']:
-        print_colored("✅ 01_cohort.py - SOFA Calculation: READY", Colors.OKGREEN)
+        print_colored("[OK] 01_cohort.py - SOFA Calculation: READY", Colors.OKGREEN)
     else:
-        print_colored("⚠️  01_cohort.py - SOFA Calculation: PARTIAL", Colors.WARNING)
+        print_colored("[WARNING] 01_cohort.py - SOFA Calculation: PARTIAL", Colors.WARNING)
         print("     └─ SOFA scores may be incomplete due to missing tables")
 
     # 02_feature_assmebly.py readiness
     if readiness['feature_extraction']:
-        print_colored("✅ 02_feature_assmebly.py - Feature Extraction: READY", Colors.OKGREEN)
+        print_colored("[OK] 02_feature_assmebly.py - Feature Extraction: READY", Colors.OKGREEN)
     else:
-        print_colored("❌ 02_feature_assmebly.py - Feature Extraction: NOT READY", Colors.FAIL)
+        print_colored("[ERROR] 02_feature_assmebly.py - Feature Extraction: NOT READY", Colors.FAIL)
         # Show which tables are blocking
         feature_tables = ['Vitals', 'Labs', 'RespiratorySupport', 'MedicationAdminContinuous', 'PatientAssessments', 'Hospitalization']
         for t in feature_tables:
@@ -415,7 +415,7 @@ def main():
     # Critical issues summary
     if error_count > 0:
         print_colored("\n" + "─" * 80, Colors.OKCYAN)
-        print_colored("⚠️  CRITICAL ISSUES TO RESOLVE", Colors.FAIL + Colors.BOLD)
+        print_colored("[WARNING] CRITICAL ISSUES TO RESOLVE", Colors.FAIL + Colors.BOLD)
         print()
 
         for r in results:

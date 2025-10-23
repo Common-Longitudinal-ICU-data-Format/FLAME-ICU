@@ -66,7 +66,7 @@ def _(data_path, os, pl):
 
     df = pl.read_parquet(wide_df_path)
 
-    print(f"✅ Loaded dataset: {df.shape}")
+    print(f"[OK] Loaded dataset: {df.shape}")
     print(f"Hospitalizations: {df['hospitalization_id'].n_unique()}")
 
     # Show available columns
@@ -85,7 +85,7 @@ def _(data_path, os, pl):
 
     cohort_df = pl.read_parquet(cohort_path)
 
-    print(f"✅ Loaded cohort: {len(cohort_df)} hospitalizations")
+    print(f"[OK] Loaded cohort: {len(cohort_df)} hospitalizations")
     print(f"Cohort columns: {cohort_df.columns[:10]}")
     return (cohort_df,)
 
@@ -99,7 +99,7 @@ def _(cohort_df, df, pl):
         how='left'
     )
 
-    print(f"✅ Joined time window columns from cohort")
+    print(f"[OK] Joined time window columns from cohort")
     print(f"Shape after join: {df_with_times.shape}")
 
     # Verify all events are within 24-hour window (strip timezone for comparison)
@@ -118,11 +118,11 @@ def _(cohort_df, df, pl):
 
     print(f"Events outside 24hr window: {len(outside_window):,} / {len(df_with_times):,}")
     if len(outside_window) > 0:
-        print("⚠️  Warning: Some events are outside the 24-hour window")
+        print("[WARNING] Some events are outside the 24-hour window")
         print(f"  Events before start: {(~df_check['after_start']).sum()}")
         print(f"  Events after end: {(~df_check['before_end']).sum()}")
     else:
-        print("✅ All events are within their 24-hour windows")
+        print("[OK] All events are within their 24-hour windows")
     return (df_with_times,)
 
 
@@ -143,7 +143,7 @@ def _(df_with_times, pl):
         pl.col('hour').is_between(0, 23)
     )
 
-    print(f"✅ Added hour column: {df_hourly['hour'].min()} to {df_hourly['hour'].max()}")
+    print(f"[OK] Added hour column: {df_hourly['hour'].min()} to {df_hourly['hour'].max()}")
     print(f"Events within 24 hours: {len(df_hourly):,}")
     return (df_hourly,)
 
@@ -230,7 +230,7 @@ def _(df_hourly, feature_cols, pl):
 
     missing_df = pl.DataFrame(missing_data)
 
-    print(f"✅ Calculated missing data % for {missing_df['feature'].n_unique()} features")
+    print(f"[OK] Calculated missing data % for {missing_df['feature'].n_unique()} features")
     print(f"Total records: {len(missing_df):,} (25 per feature: 24 hourly + 1 overall)")
     return (missing_df,)
 
@@ -288,7 +288,7 @@ def _(missing_with_cat, os, output_path, pl, plt, sns):
         cat_data = missing_with_cat.filter(pl.col('category') == _cat).to_pandas()
 
         if len(cat_data) == 0:
-            print(f"⚠️  No features in category: {_cat}")
+            print(f"[WARNING] No features in category: {_cat}")
             continue
 
         # Sort features by average missing percentage (most complete → most missing)
@@ -356,7 +356,7 @@ def _(missing_with_cat, os, output_path, pl, plt, sns):
         fig.savefig(output_file, format='jpg', dpi=300, bbox_inches='tight', pad_inches=0.3)
         plt.close(fig)  # Close to free memory
 
-        print(f"✅ Saved {_cat} heatmap: {output_file}")
+        print(f"[OK] Saved {_cat} heatmap: {output_file}")
         heatmap_files.append(output_file)
     return
 
@@ -367,7 +367,7 @@ def _(missing_with_cat, os, output_path, pl):
     missing_csv_path = os.path.join(output_path, 'hourly_missing_data.csv')
     missing_with_cat.filter(pl.col('hour') == 24).select(['feature', 'missing_pct']).to_pandas().to_csv(missing_csv_path, index=False)
 
-    print(f"\n✅ Saved missing data: {missing_csv_path}")
+    print(f"\n[OK] Saved missing data: {missing_csv_path}")
     print(f"File size: {os.path.getsize(missing_csv_path) / 1024:.1f} KB")
     return
 
@@ -411,7 +411,7 @@ def _(missing_with_cat, pl):
     for _bot_feat_row in feat_missing.tail(5).to_dicts():
         print(f"  {_bot_feat_row['feature']}: {_bot_feat_row['mean_missing']:.1f}% missing")
 
-    print("\n✅ Missing data analysis complete!")
+    print("\n[OK] Missing data analysis complete!")
     return
 
 

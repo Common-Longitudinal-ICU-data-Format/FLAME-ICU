@@ -135,7 +135,7 @@ def load_base_models(config):
 
     xgb_model = xgb.Booster()
     xgb_model.load_model(xgb_model_path)
-    print(f"✅ Loaded XGBoost base model from: {xgb_model_path}")
+    print(f"[OK] Loaded XGBoost base model from: {xgb_model_path}")
 
     # Load XGBoost feature names
     xgb_features_path = os.path.join(xgb_dir, 'feature_names.pkl')
@@ -165,7 +165,7 @@ def load_base_models(config):
 
     # Load pre-trained weights
     nn_model.load_state_dict(torch.load(nn_model_path, map_location='cpu'))
-    print(f"✅ Loaded Neural Network base model from: {nn_model_path}")
+    print(f"[OK] Loaded Neural Network base model from: {nn_model_path}")
 
     return xgb_model, nn_model, xgb_feature_names
 
@@ -518,7 +518,7 @@ def calculate_bootstrap_confidence_intervals(y_true, y_pred_proba, y_pred, confi
             ci_results[f'{metric_name}_ci_lower'] = np.nan
             ci_results[f'{metric_name}_ci_upper'] = np.nan
 
-    print(f"  ✅ Bootstrap CIs calculated ({len(bootstrap_results['roc_auc'])} valid iterations)")
+    print(f"  [OK] Bootstrap CIs calculated ({len(bootstrap_results['roc_auc'])} valid iterations)")
     return ci_results
 
 
@@ -655,5 +655,5 @@ def save_model_artifacts(model, feature_names, config, model_type, results, site
         with open(results_path, 'w') as f:
             json.dump(results, f, indent=2)
 
-    print(f"✅ Model artifacts saved to: {model_dir}")
+    print(f"[OK] Model artifacts saved to: {model_dir}")
     return model_dir

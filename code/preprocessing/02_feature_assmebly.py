@@ -107,7 +107,7 @@ def _(os, output_dir, pd):
 
     if os.path.exists(cohort_path):
         cohort_df = pd.read_parquet(cohort_path)
-        print(f"✅ Cohort loaded successfully: {len(cohort_df)} hospitalizations")
+        print(f"[OK] Cohort loaded successfully: {len(cohort_df)} hospitalizations")
         print(f"Mortality rate: {cohort_df['disposition'].mean():.3f}")
 
         # Convert datetime columns
@@ -238,7 +238,7 @@ def _(ClifOrchestrator, category_filters, cohort_ids):
         filters={'hospitalization_id': cohort_ids}
     )
 
-    print("✅ ClifOrchestrator initialized and tables loaded successfully with cohort filtering")
+    print("[OK] ClifOrchestrator initialized and tables loaded successfully with cohort filtering")
     return (clif,)
 
 
@@ -263,7 +263,7 @@ def _(apply_outlier_handling, clif):
         else:
             print(f"Warning: {_table_name} table not loaded")
 
-    print("\n✅ Outlier handling completed for all tables")
+    print("\n[OK] Outlier handling completed for all tables")
     return
 
 
@@ -299,7 +299,7 @@ def _(category_filters, clif, cohort_df, os, output_dir):
 
     wide_df =clif.wide_df.copy()
 
-    print(f"✅ Wide dataset created successfully")
+    print(f"[OK] Wide dataset created successfully")
     print(f"Shape: {clif.wide_df.shape}")
     print(f"Hospitalizations: {wide_df['hospitalization_id'].nunique()}")
     print(f"Date range: {wide_df['event_time'].min()} to {wide_df['event_time'].max()}")
@@ -307,7 +307,7 @@ def _(category_filters, clif, cohort_df, os, output_dir):
     # Save wide dataset for QC analysis
     wide_df_path = os.path.join(output_dir, 'wide_df_24hr.parquet')
     wide_df.to_parquet(wide_df_path)
-    print(f"✅ Saved wide dataset for QC analysis: {wide_df_path}")
+    print(f"[OK] Saved wide dataset for QC analysis: {wide_df_path}")
     print(f"File size: {os.path.getsize(wide_df_path) / 1024**2:.1f} MB")
     return (wide_df,)
 
@@ -378,7 +378,7 @@ def _(wide_df):
     aggregated_df.columns = [col[1] if col[1] else col[0]
                               for col in aggregated_df.columns.values]
 
-    print("✅ Aggregation complete")
+    print("[OK] Aggregation complete")
     print(f"Event-wide shape: {wide_df.shape}")
     print(f"Aggregated shape: {aggregated_df.shape}")
     print(f"Unique hospitalizations: {aggregated_df['hospitalization_id'].nunique()}")
@@ -431,10 +431,10 @@ def _(aggregated_df, pd, wide_df):
         for col in _device_cols:
             aggregated_with_derived_features[col] = aggregated_with_derived_features[col].fillna(0).astype(int)
 
-        print(f"✅ Added {len(_device_cols)} device one-hot encoded columns")
+        print(f"[OK] Added {len(_device_cols)} device one-hot encoded columns")
         print(f"Device columns: {_device_cols}")
     else:
-        print("⚠️ device_category not found in wide dataset")
+        print("[WARNING] device_category not found in wide dataset")
 
     # 2. Vasopressor count (unique vasopressor classes in 24hr)
     print("\nAdding vasopressor count...")
@@ -465,10 +465,10 @@ def _(aggregated_df, pd, wide_df):
         # Fill NaN with 0
         aggregated_with_derived_features['vasopressor_count'] = aggregated_with_derived_features['vasopressor_count'].fillna(0).astype(int)
 
-        print("✅ Vasopressor count added")
+        print("[OK] Vasopressor count added")
         print(f"Vasopressor count distribution: {aggregated_with_derived_features['vasopressor_count'].value_counts().sort_index().to_dict()}")
     else:
-        print("⚠️ No vasopressor columns found in wide dataset")
+        print("[WARNING] No vasopressor columns found in wide dataset")
     return (aggregated_with_derived_features,)
 
 
@@ -496,7 +496,7 @@ def _(aggregated_with_derived_features, cohort_df, pd):
         how='inner'  # Inner join filters out any missing demographics
     )
 
-    print("✅ Demographics, disposition, and SOFA scores added to aggregated dataset")
+    print("[OK] Demographics, disposition, and SOFA scores added to aggregated dataset")
     print(f"Shape before merge: {aggregated_with_derived_features.shape}")
     print(f"Shape after merge: {aggregated_with_demographics.shape}")
     print(f"Hospitalizations with demographics: {aggregated_with_demographics['hospitalization_id'].nunique()}")
@@ -533,7 +533,7 @@ def _(aggregated_with_demographics):
         lambda x: 1 if x == 'female' else 0
     )
 
-    print("✅ Binary sex feature created")
+    print("[OK] Binary sex feature created")
     print(f"isfemale distribution: {aggregated_with_sex_binary['isfemale'].value_counts().to_dict()}")
     print(f"  Female (1): {(aggregated_with_sex_binary['isfemale'] == 1).sum()}")
     print(f"  Not Female (0): {(aggregated_with_sex_binary['isfemale'] == 0).sum()}")
@@ -591,7 +591,7 @@ def _(aggregated_with_sex_binary, clif, pd):
     # Remove intermediate columns but keep split column
     aggregated_final = aggregated_with_admission.drop(columns=['admission_dttm', 'admission_year', 'admission_month'])
 
-    print("\n✅ Temporal split column added (split_type)")
+    print("\n[OK] Temporal split column added (split_type)")
     print(f"Final aggregated dataset shape: {aggregated_final.shape}")
     return (aggregated_final,)
 
@@ -627,7 +627,7 @@ def _(aggregated_final, pd):
     age_dummies = pd.get_dummies(aggregated_with_age_bins['age_bin'], prefix='age')
     aggregated_with_age_bins = pd.concat([aggregated_with_age_bins, age_dummies], axis=1)
 
-    print("✅ Age bins created and one-hot encoded")
+    print("[OK] Age bins created and one-hot encoded")
     print(f"Age distribution: {aggregated_with_age_bins['age_bin'].value_counts().to_dict()}")
     print(f"Age bin columns: {[col for col in aggregated_with_age_bins.columns if col.startswith('age_')]}")
     return (aggregated_with_age_bins,)
@@ -674,7 +674,7 @@ def _(aggregated_with_age_bins):
         unique_vals = aggregated_standardized[_col].dropna().unique()[:5]
         print(f"{_col}: {unique_vals.tolist()}")
 
-    print("\n✅ Categorical columns standardized to lowercase")
+    print("\n[OK] Categorical columns standardized to lowercase")
     print(f"Final dataset shape: {aggregated_standardized.shape}")
     return (aggregated_standardized,)
 
@@ -713,7 +713,7 @@ def _(aggregated_standardized, np):
     unexpected_object_cols = [col for col in object_cols if col not in expected_object_cols]
 
     if unexpected_object_cols:
-        print(f"⚠️  Warning: Unexpected object columns found: {unexpected_object_cols}")
+        print(f"[WARNING] Unexpected object columns found: {unexpected_object_cols}")
 
     # Print dtype summary
     print("\n=== Data Type Summary ===")
@@ -721,7 +721,7 @@ def _(aggregated_standardized, np):
     for dtype, dtype_count in dtype_counts.items():
         print(f"  {dtype}: {dtype_count} columns")
 
-    print("\n✅ Data types verified and corrected")
+    print("\n[OK] Data types verified and corrected")
     return (aggregated_typed,)
 
 
@@ -740,7 +740,7 @@ def _(aggregated_typed, get_output_path, os):
     output_path = get_output_path('preprocessing', 'aggregated_features_24hr.parquet')
     aggregated_typed.to_parquet(output_path, index=False)
 
-    print(f"✅ Aggregated dataset saved to: {output_path}")
+    print(f"[OK] Aggregated dataset saved to: {output_path}")
     print(f"File size: {os.path.getsize(output_path) / 1024**2:.1f} MB")
     print(f"Shape: {aggregated_typed.shape}")
 
@@ -791,7 +791,7 @@ def _(aggregated_typed, get_output_path, os):
     if 'vasopressor_count' in aggregated_typed.columns:
         print("Derived: ['vasopressor_count', 'isfemale']")
 
-    print("\n🎉 Feature extraction and aggregation completed successfully!")
+    print("\n[SUCCESS] Feature extraction and aggregation completed successfully!")
     print("Dataset ready for modeling with one row per hospitalization.")
     return
 
@@ -954,7 +954,7 @@ def _(aggregated_typed, json):
             "mortality_percentage": float(split_data['disposition'].mean() * 100)
         }
 
-    print(f"✅ Reporting statistics generated for {reporting_stats['site']}")
+    print(f"[OK] Reporting statistics generated for {reporting_stats['site']}")
     print(f"Total variables: {sum(len(v.get('continuous', {})) + len(v.get('categorical', {})) for v in reporting_stats.values() if isinstance(v, dict))}")
     return (reporting_stats,)
 
@@ -976,7 +976,7 @@ def _(ensure_dir, get_project_root, json, os, reporting_stats):
     with open(report_path, 'w') as output_file:
         json.dump(reporting_stats, output_file, indent=2)
 
-    print(f"✅ Reporting statistics saved to: {report_path}")
+    print(f"[OK] Reporting statistics saved to: {report_path}")
     print(f"File size: {os.path.getsize(report_path) / 1024:.1f} KB")
 
     # Display summary
@@ -993,7 +993,7 @@ def _(ensure_dir, get_project_root, json, os, reporting_stats):
             if n_continuous > 0 or n_categorical > 0:
                 print(f"  {category}: {n_continuous} continuous, {n_categorical} categorical")
 
-    print("\n✅ Table 1 statistics ready for research paper and multi-site aggregation!")
+    print("\n[OK] Table 1 statistics ready for research paper and multi-site aggregation!")
     return
 
 
