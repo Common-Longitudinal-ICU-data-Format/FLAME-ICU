@@ -45,7 +45,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 ### 2. Configure Site
 
-Update `clif_config.json`:
+Update `clif_config_template.json` and rename to `clif_config.json` and update fields:
 
 ``` json
 {

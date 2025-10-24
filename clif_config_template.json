@@ -1,0 +1,6 @@
+{
+    "site": "sitename",
+    "data_directory": "/Users/sudo_sage/Documents/WORK/folder",
+    "filetype": "parquet",
+    "timezone": "US/Central"
+}
