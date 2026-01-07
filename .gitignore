@@ -42,4 +42,5 @@ PHASE1_RESULTS_UPLOAD_ME/
 /PHASE1_MODELS_UPLOAD_ME
 
 FLAME/
+outputs/
 clif_config.json

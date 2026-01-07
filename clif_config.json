@@ -1,6 +1,6 @@
 {
-    "site": "your_site_name",
-    "data_directory": "/path/clif",
-    "filetype": "parquet/csv",
-    "timezone": "US/Central - update you timezone here"
+    "site": "mimic",
+    "data_directory": "/Users/sudo_sage/Documents/WORK/clif_r",
+    "filetype": "parquet",
+    "timezone": "US/Eastern"
 }
