@@ -42,24 +42,31 @@ def _():
     from flair import generate_task_dataset, TASK_REGISTRY, FLAIRCohortBuilder
     from pathlib import Path
     import polars as pl
+    import json
     import os
     import warnings
     warnings.filterwarnings('ignore')
 
     print("=== FLAIR Task Dataset Generator ===")
     print(f"Available tasks: {list(TASK_REGISTRY.keys())}")
-    return Path, generate_task_dataset, pl
+    return Path, generate_task_dataset, json, pl
 
 
 @app.cell
-def _(Path):
+def _(Path, json):
     # Configuration - use absolute paths based on project root
     PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
     CONFIG_PATH = str(PROJECT_ROOT / "clif_config.json")
     OUTPUT_DIR = PROJECT_ROOT / "outputs" / "datasets"
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Temporal split configuration
+    # Load config to detect site
+    with open(CONFIG_PATH) as f:
+        _config = json.load(f)
+    SITE_NAME = _config.get("site", "").lower()
+    IS_MIMIC = SITE_NAME == "mimic"
+
+    # Temporal split configuration (only used for non-MIMIC sites)
     TRAIN_START = "2018-01-01"
     TRAIN_END = "2023-12-31"
     TEST_START = "2024-01-01"
@@ -74,12 +81,17 @@ def _(Path):
 
     print(f"Configuration:")
     print(f"  Config path: {CONFIG_PATH}")
+    print(f"  Site: {SITE_NAME}")
     print(f"  Output directory: {OUTPUT_DIR}")
-    print(f"  Train period: {TRAIN_START} to {TRAIN_END}")
-    print(f"  Test period: {TEST_START} to {TEST_END}")
+    if IS_MIMIC:
+        print(f"  MIMIC detected - using built-in train/test splits (no date filtering)")
+    else:
+        print(f"  Train period: {TRAIN_START} to {TRAIN_END}")
+        print(f"  Test period: {TEST_START} to {TEST_END}")
     print(f"  Tasks: {TASKS}")
     return (
         CONFIG_PATH,
+        IS_MIMIC,
         OUTPUT_DIR,
         TASKS,
         TEST_END,
@@ -98,6 +110,7 @@ def _(mo):
 @app.cell
 def _(
     CONFIG_PATH,
+    IS_MIMIC,
     OUTPUT_DIR,
     TASKS,
     TEST_END,
@@ -118,15 +131,24 @@ def _(
         _output_path = str(OUTPUT_DIR / f"{_task_name}.parquet")
 
         try:
-            _df = generate_task_dataset(
-                config_path=CONFIG_PATH,
-                task_name=_task_name,
-                train_start=TRAIN_START,
-                train_end=TRAIN_END,
-                test_start=TEST_START,
-                test_end=TEST_END,
-                output_path=_output_path,
-            )
+            # For MIMIC, no date parameters needed (uses built-in splits)
+            # For other sites, use temporal split configuration
+            if IS_MIMIC:
+                _df = generate_task_dataset(
+                    config_path=CONFIG_PATH,
+                    task_name=_task_name,
+                    output_path=_output_path,
+                )
+            else:
+                _df = generate_task_dataset(
+                    config_path=CONFIG_PATH,
+                    task_name=_task_name,
+                    train_start=TRAIN_START,
+                    train_end=TRAIN_END,
+                    test_start=TEST_START,
+                    test_end=TEST_END,
+                    output_path=_output_path,
+                )
 
             results[_task_name] = _df
 
@@ -153,6 +175,12 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""## Dataset Summary""")
+    return
+
+
+@app.cell
+def _(results):
+    results['task7_icu_readmission']
     return
 
 
