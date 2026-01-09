@@ -5,6 +5,7 @@ Uses clifpy to load CLIF tables and create aggregated features.
 Reuses patterns from old/preprocessing/02_feature_assmebly.py
 """
 
+import json
 import pandas as pd
 import numpy as np
 import polars as pl
@@ -343,6 +344,22 @@ def extract_features_for_task(
     # Convert polars to pandas if needed
     if isinstance(task_dataset, pl.DataFrame):
         task_dataset = task_dataset.to_pandas()
+
+    # Load timezone from config and localize datetime columns
+    # FLAIR strips timezone info, so we need to add it back for clifpy compatibility
+    with open(config_path) as f:
+        config = json.load(f)
+    timezone = config["timezone"]
+
+    # Localize datetime columns (not convert - just add timezone info)
+    # Using same logic as clifpy/utils/io.py for DST handling
+    for col in [time_col_start, time_col_end]:
+        if col in task_dataset.columns:
+            if pd.api.types.is_datetime64_any_dtype(task_dataset[col]):
+                if task_dataset[col].dt.tz is None:
+                    task_dataset[col] = task_dataset[col].dt.tz_localize(
+                        timezone, ambiguous=True, nonexistent='shift_forward'
+                    )
 
     extractor = FeatureExtractor(config_path)
 
