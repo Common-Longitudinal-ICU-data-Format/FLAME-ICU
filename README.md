@@ -1,181 +1,205 @@
 # FLAME-ICU
 
-Federated Learning Adaptable Mortality Estimator for the ICU
+**F**ederated **L**earning **A**daptable **M**ortality **E**stimator for the ICU
 
-## Project Overview
+A multi-site federated learning implementation of the [FLAIR benchmark](./FLAIR/) for ICU outcome prediction using CLIF-standardized data.
 
-FLAME-ICU implements a multi-site federated learning approach for ICU mortality prediction using CLIF-standardized data. The project coordinates 6-7 institutions with RUSH as the main site, developing both XGBoost and Neural Network models.
+---
 
-### Stage 1: Model Development (3 Approaches)
+## What is FLAIR?
 
-1.  **Cross-Site Validation** - Test RUSH-trained models across sites without local training
-2.  **Transfer Learning** - Fine-tune RUSH pre-trained models with local site data
-3.  **Independent Training** - Each site trains models from scratch
+> **Note:** FLAIR is currently in development and will soon be available via PyPI as `flair-benchmark`.
 
-### Stage 2: Comprehensive Testing
+FLAIR (Federated Learning for AI Research) is a privacy-preserving benchmark framework for ICU prediction tasks. It provides:
 
--   **Phase 1**: Cross-site testing of all Stage 1 models
--   **Phase 2**: Leave-one-out ensemble construction with accuracy weighting
+- **7 clinically relevant prediction tasks** for ICU outcomes
+- **Standardized data format** using CLIF (Common Longitudinal ICU Format)
+- **Privacy-preserving design** - no data leaves your institution
+- **Reproducible benchmarks** across 17+ US hospitals
 
-### Data Split
+### FLAIR Tasks
 
--   **Training**: 2018-2022 admissions
--   **Validation**: 2023 admissions
--   **Testing**: 2024 admissions
+| Task | Name | Type | Prediction Window |
+|------|------|------|-------------------|
+| 1 | Discharged Home | Classification | 24 hours |
+| 2 | Discharged to LTACH | Classification | 24 hours |
+| 3 | 72-Hour Respiratory Outcome | Multiclass | Variable |
+| 4 | Hypoxic Proportion | Regression | 24-72 hours |
+| **5** | **ICU Length of Stay** | **Regression** | **24 hours** |
+| **6** | **Hospital Mortality** | **Classification** | **24 hours** |
+| **7** | **ICU Readmission** | **Classification** | **Entire ICU stay** |
 
-### Deliverables
+FLAME-ICU implements **Tasks 5, 6, and 7**.
 
-Models are shared via BOX for cross-site evaluation and ensemble construction, with final deployment recommendations based on performance metrics.
+---
 
-## Setup
+## Quick Start
 
-### 1. Install UV
+See **[RUN.md](./RUN.md)** for complete step-by-step instructions.
 
-**Mac/Linux:**
+### TL;DR
 
-``` bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+```bash
+# 1. Install FLAIR (current - from local source)
+cd FLAIR && uv pip install -e . && cd ..
+
+# 1. Install FLAIR (future - when available on PyPI)
+# uv pip install flair-benchmark
+
+# 2. Install project dependencies
+uv sync
+
+# 3. Configure
+cp clif_config_template.json clif_config.json
+# Edit with your site name and data path
+
+# 4. Run notebooks in order
+uv run marimo edit code/notebooks/01_task_generator.py
+uv run marimo edit code/notebooks/02_feature_engineering.py
+uv run marimo edit code/notebooks/03b_task6_mortality.py
+uv run marimo edit code/notebooks/03c_task7_readmission.py
 ```
 
-**Windows (PowerShell):**
+---
 
-``` powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+## Project Structure
+
+```
+FLAME-ICU/
+├── FLAIR/                    # FLAIR benchmark library
+│   └── flair/                # Core library code
+├── code/
+│   ├── notebooks/            # Marimo notebooks (main workflow)
+│   │   ├── 01_task_generator.py      # Generate task datasets
+│   │   ├── 02_feature_engineering.py # Extract CLIF features
+│   │   ├── 03a_task5_icu_los.py      # ICU LOS models
+│   │   ├── 03b_task6_mortality.py    # Mortality models
+│   │   └── 03c_task7_readmission.py  # Readmission models
+│   ├── models/               # Model implementations
+│   │   ├── xgboost_model.py
+│   │   ├── elasticnet_model.py
+│   │   └── evaluation.py
+│   └── features.py           # Feature extraction
+├── outputs/                  # Generated datasets and features
+├── rush_models/              # Rush baseline models
+├── results_to_box/           # Site results for upload
+├── optimization/             # Hyperparameter tuning (Optuna)
+├── clif_config.json          # Site configuration
+├── RUN.md                    # Execution guide
+└── README.md                 # This file
 ```
 
-### 2. Configure Site
+---
 
-Update `clif_config_template.json` and rename to `clif_config.json` and update fields:
+## Federated Learning Workflow
 
-``` json
+### Rush Site (Baseline)
+
+1. Train XGBoost and ElasticNet models on Rush data
+2. Upload trained models to BOX
+3. Models serve as baseline for other sites
+
+### Other Sites (Evaluation)
+
+1. Download Rush models from BOX
+2. Run 4 experiments per task:
+   - **Rush Evaluation** - Test Rush models on local data
+   - **Platt Scaling** - Calibrate Rush models with local train data
+   - **Transfer Learning** - Fine-tune Rush models with local data
+   - **Independent** - Train from scratch on local data
+3. Upload results to BOX
+
+---
+
+## Models
+
+### XGBoost
+- Gradient boosting with native missing value handling
+- Optimized hyperparameters via Optuna (50 trials, 3-fold CV)
+
+### ElasticNet
+- L1+L2 regularized linear model
+- StandardScaler + median imputation
+- LogisticRegression for classification, ElasticNet for regression
+
+### Performance (Optuna-optimized)
+
+| Model | Task 5 (R²) | Task 7 (AUROC) |
+|-------|-------------|----------------|
+| XGBoost | 0.183 | 0.654 |
+| ElasticNet | 0.128 | 0.609 |
+
+---
+
+## Required CLIF Tables
+
+| Table | Key Columns | Categories |
+|-------|-------------|------------|
+| hospitalization | All | - |
+| patient | All | - |
+| adt | All | location_category |
+| labs | lab_result_dttm, lab_category, lab_value | albumin, creatinine, lactate, etc. |
+| vitals | recorded_dttm, vital_category, vital_value | heart_rate, map, sbp, spo2, temp_c |
+| patient_assessments | All | gcs_total |
+| medication_admin_continuous | med_dose, med_dose_unit | vasopressors |
+| respiratory_support | All | device_category, fio2_set, peep_set |
+
+---
+
+## Configuration
+
+Create `clif_config.json` from template:
+
+```json
 {
     "site": "your_site_name",
-    "data_directory": "/path/to/your/clif/data",
+    "data_directory": "/path/to/clif/data",
     "filetype": "parquet",
     "timezone": "US/Central"
 }
 ```
 
-### 3. Install Dependencies
+---
 
-``` bash
-uv sync
-```
+## Metrics
 
-**Troubleshooting:** If you encounter errors when running scripts with `uv run`, use `uv run marimo edit <script.py>` to debug at the cell level in an interactive environment.
+### Classification (Tasks 6, 7)
+- AUROC, AUPRC, F1, Accuracy
+- Precision, Recall, Specificity, NPV
+- Brier Score, ICI (Integrated Calibration Index)
+- DCA (Decision Curve Analysis)
+- Bootstrap 95% confidence intervals
 
-## Required CLIF Tables
+### Regression (Task 5)
+- MSE, RMSE, MAE, R²
+- Predicted vs Observed plots
 
-| Table | Columns | Categories |
-|------------------|-----------------------|-------------------------------|
-| **adt** | All columns | location_category |
-| **hospitalization** | All columns | \- |
-| **patient** | All columns | \- |
-| **labs** | hospitalization_id, lab_result_dttm, lab_category, lab_value, lab_value_numeric | albumin, alt, ast, bicarbonate, bilirubin_total, bun, chloride, creatinine, inr, lactate, platelet_count, po2_arterial, potassium, pt, ptt, sodium, wbc |
-| **vitals** | hospitalization_id, recorded_dttm, vital_category, vital_value | heart_rate, map, sbp, respiratory_rate, spo2, temp_c |
-| **patient_assessments** | All columns | gcs_total |
-| **medication_admin_continuous** | All columns (including med_dose, med_dose_unit) | norepinephrine, epinephrine, phenylephrine, vasopressin, dopamine, dobutamine, milrinone, isoproterenol |
-| **respiratory_support** | All columns | device_category, fio2_set, peep_set |
+---
 
-------------------------------------------------------------------------
+## Dependencies
 
-> **⚠️ IMPORTANT: Before Execution**
->
-> **Visit CLIF BOX and download the `PHASE1_MODELS_UPLOAD_ME` folder, then place it in the project root directory.**
->
-> This folder contains the necessary models required for the execution steps below.
+- Python 3.11+
+- [UV](https://github.com/astral-sh/uv) package manager
+- [clifpy](https://github.com/clif-consortium/clifpy) >= 0.3.4
+- [marimo](https://marimo.io/) notebooks
+- XGBoost, scikit-learn, pandas, polars
 
-------------------------------------------------------------------------
+---
 
-> **💡 OPTIONAL: Logging Command Output**
->
-> To capture command output for debugging or record-keeping, you can append logging syntax to the end of any execution command:
->
-> **Mac/Linux:** `2>&1 | tee logs/filename.log`
->
-> **Windows:** `2>&1 | Tee-Object logs/filename.log`
->
-> **Example:** `uv run code/preprocessing/01_cohort.py 2>&1 | tee logs/cohort.log`
->
-> Create the logs directory first: `mkdir -p logs` (Mac/Linux) or `New-Item -ItemType Directory -Path logs` (Windows)
+## Privacy & Compliance
 
-------------------------------------------------------------------------
+FLAIR is designed for privacy-preserving federated learning:
 
-## Execution Guide
+- No network requests allowed during execution
+- PHI detection scans all outputs
+- Cell counts < 10 are suppressed (HIPAA safe harbor)
+- Code reviewed by institutional PIs before execution
+- Individual-level data never leaves the institution
 
-### Prerequisites (All Approaches)
+---
 
-``` bash
-# 1. Configure site (update clif_config.json)
-# 2. Install dependencies
-uv sync
-# 3. Run preprocessing pipeline
-# optional -> uv run code/preprocessing/00_scan_tables.py
-uv run code/preprocessing/01_cohort.py
-uv run code/preprocessing/02_feature_assmebly.py
-uv run code/preprocessing/03_qc_heatmap.py
-```
+## Support
 
-### Approach 1: Cross-Site Validation
-
-**Federated Sites:**
-
-``` bash
-# Download RUSH models from BOX
-# Visit CLIF BOX and download the model_storage folder, place it in project root
-# Only run inference with RUSH models (no training)
-uv run code/approach1_cross_site/stage_1/inference.py
-# Upload results to BOX
-```
-
-### Approach 2: Transfer Learning
-
-**Federated Sites:**
-
-``` bash
-# Download RUSH base models from BOX
-# Visit CLIF BOX and download the model_storage folder, place it in project root
-# After preprocessing, fine-tune RUSH models with local data
-uv run code/approach2_transfer_learning/stage_1/transfer_learning.py
-# Upload fine-tuned models to BOX
-```
-
-### Approach 3: Independent Training
-
-**Federated Sites:**
-
-``` bash
-# After preprocessing, train models independently
-uv run code/approach3_independent/stage_1/train_models.py
-uv run code/approach3_independent/stage_1/inference.py
-# Upload models to BOX
-```
-
-------------------------------------------------------------------------
-
-## Uploading Results to BOX
-
-**All Sites:**
-
-After completing the execution steps for all approach, a `*_upload_me` folder will be generated in your project directory.
-
-**Upload Instructions:**
-
--   Locate the `phase1_models_upload_me` & `phase1_results_upload_me` folder in your project root
-
--   Upload the entire folder to: `CLIF BOX / FLAME / [your_site_name]`
-
--   Replace `[your_site_name]` with your site name from `clif_config.json`
-
-**Example:** upload to: `CLIF BOX / FLAME / your_site_name`
-
-------------------------------------------------------------------------
-
-> **⚠️ IMPORTANT: Stage 2 Coming - Preserve Your Data**
->
-> **Stage 2 of this project is forthcoming and will require your preprocessed data files.**
->
-> -   **DO NOT delete** your preprocessed data files after uploading results to BOX
-> -   Keep all preprocessed data **safe and saved locally** in a secure location
-> -   Ensure proper PHI data handling and security protocols are maintained
-> -   You will need this data for Stage 2 execution
+For issues or questions:
+- Check [RUN.md](./RUN.md) troubleshooting section
+- Contact the FLAME-ICU team via CLIF consortium channels

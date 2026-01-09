@@ -12,22 +12,38 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 
 
-# Optimized XGBoost parameters (from old/approach1_cross_site/approach_1_config.json)
-DEFAULT_PARAMS = {
-    'eta': 0.06057610120076962,
+# Task-specific optimized parameters (from Optuna, 50 trials, 3-fold CV)
+TASK5_PARAMS = {  # ICU LOS (regression), R²=0.183
+    'eta': 0.011917525645112448,
     'max_depth': 8,
-    'min_child_weight': 6,
-    'max_delta_step': 0,
-    'subsample': 0.9274884839441507,
-    'colsample_bytree': 0.9225204370066138,
-    'gamma': 0.1652835907230118,
-    'reg_alpha': 8.404509395484988,
-    'reg_lambda': 0.10842839237042663,
+    'min_child_weight': 19,
+    'subsample': 0.8437292796171701,
+    'colsample_bytree': 0.7264815927355102,
+    'gamma': 4.520783292608081,
+    'reg_alpha': 0.0001252884958540524,
+    'reg_lambda': 2.2420170246756734e-05,
+    'num_rounds': 569,
     'seed': 42,
-    'num_rounds': 500,
     'early_stopping_rounds': 20,
-    'use_class_weights': True
 }
+
+TASK7_PARAMS = {  # ICU Readmission (classification), AUROC=0.654
+    'eta': 0.012651716027478195,
+    'max_depth': 4,
+    'min_child_weight': 9,
+    'subsample': 0.547664632984775,
+    'colsample_bytree': 0.7836297230746503,
+    'gamma': 1.1972067148165095,
+    'reg_alpha': 5.563323957649346,
+    'reg_lambda': 3.762817262535499e-05,
+    'num_rounds': 471,
+    'seed': 42,
+    'early_stopping_rounds': 20,
+    'use_class_weights': True,
+}
+
+# Default falls back to Task 7 params (classification)
+DEFAULT_PARAMS = TASK7_PARAMS
 
 
 class XGBoostModel:
@@ -130,7 +146,8 @@ class XGBoostModel:
             verbose_eval=50 if verbose else False
         )
 
-        print(f"  Training complete. Best iteration: {self.model.best_iteration}")
+        _best_iter = getattr(self.model, 'best_iteration', num_rounds)
+        print(f"  Training complete. Best iteration: {_best_iter}")
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -225,4 +242,67 @@ class XGBoostModel:
         self.model = xgb.Booster()
         self.model.load_model(path)
         print(f"Model loaded from: {path}")
+        return self
+
+    def fine_tune(
+        self,
+        X_train: pd.DataFrame,
+        y_train: np.ndarray,
+        X_val: Optional[pd.DataFrame] = None,
+        y_val: Optional[np.ndarray] = None,
+        lr_multiplier: float = 0.1,
+        num_rounds: int = 100,
+        verbose: bool = True
+    ) -> 'XGBoostModel':
+        """
+        Fine-tune a pre-loaded model with new data (transfer learning).
+
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            X_val: Validation features (optional)
+            y_val: Validation labels (optional)
+            lr_multiplier: Learning rate multiplier (default 0.1x)
+            num_rounds: Number of additional boosting rounds
+            verbose: Print training progress
+
+        Returns:
+            Self for chaining
+        """
+        if self.model is None:
+            raise ValueError("No base model loaded. Call load() first.")
+
+        print(f"Fine-tuning XGBoost ({self.task_type}) with {lr_multiplier}x learning rate...")
+        print(f"  Train shape: {X_train.shape}")
+
+        self.feature_names = list(X_train.columns)
+        params, _, early_stopping_rounds = self._prepare_params(y_train)
+
+        # Reduce learning rate for fine-tuning
+        original_eta = params.get('eta', 0.06)
+        params['eta'] = original_eta * lr_multiplier
+        print(f"  Reduced learning rate: {original_eta:.4f} -> {params['eta']:.4f}")
+
+        dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=self.feature_names)
+
+        evals = [(dtrain, 'train')]
+        if X_val is not None and y_val is not None:
+            dval = xgb.DMatrix(X_val, label=y_val, feature_names=self.feature_names)
+            evals.append((dval, 'val'))
+            print(f"  Val shape: {X_val.shape}")
+
+        # Continue training from existing model
+        self.model = xgb.train(
+            params,
+            dtrain,
+            num_boost_round=num_rounds,
+            evals=evals,
+            early_stopping_rounds=early_stopping_rounds if X_val is not None else None,
+            evals_result=self.evals_result,
+            xgb_model=self.model,  # KEY: Continue from pre-trained model
+            verbose_eval=50 if verbose else False
+        )
+
+        _best_iter = getattr(self.model, 'best_iteration', num_rounds)
+        print(f"  Fine-tuning complete. Best iteration: {_best_iter}")
         return self

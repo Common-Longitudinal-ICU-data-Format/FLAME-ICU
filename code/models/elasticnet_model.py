@@ -13,14 +13,25 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 
 
-# Default ElasticNet parameters
-DEFAULT_PARAMS = {
-    'alpha': 1.0,
-    'l1_ratio': 0.5,
-    'max_iter': 1000,
+# Task-specific optimized parameters (from Optuna, 50 trials, 3-fold CV)
+TASK5_PARAMS = {  # ICU LOS (regression), R²=0.128
+    'alpha': 0.08948943563140471,
+    'l1_ratio': 0.8305021903274653,
+    'max_iter': 1494,
     'tol': 0.0001,
-    'random_state': 42
+    'random_state': 42,
 }
+
+TASK7_PARAMS = {  # ICU Readmission (classification), AUROC=0.609
+    'alpha': 5.571704284784726,
+    'l1_ratio': 0.7817363886897264,
+    'max_iter': 4922,
+    'tol': 0.0001,
+    'random_state': 42,
+}
+
+# Default falls back to Task 7 params (classification)
+DEFAULT_PARAMS = TASK7_PARAMS
 
 
 class ElasticNetModel:

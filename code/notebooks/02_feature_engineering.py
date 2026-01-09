@@ -43,15 +43,35 @@ def _(mo):
 @app.cell
 def _():
     import sys
-    sys.path.append('../..')
+    import os
+    from pathlib import Path
+
+    # Insert project root at beginning of path to override built-in 'code' module
+    _project_root = str(Path(os.getcwd()).resolve())
+    # If running from notebooks dir, go up two levels
+    if _project_root.endswith('notebooks'):
+        _project_root = str(Path(_project_root).parent.parent)
+    elif _project_root.endswith('code'):
+        _project_root = str(Path(_project_root).parent)
+
+    if _project_root not in sys.path:
+        sys.path.insert(0, _project_root)
 
     import pandas as pd
     import polars as pl
-    from pathlib import Path
     import warnings
     warnings.filterwarnings('ignore')
 
-    from code.features import FeatureExtractor, extract_features_for_task
+    # Import using importlib to avoid name conflict with built-in 'code' module
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location(
+        "features",
+        Path(_project_root) / "code" / "features.py"
+    )
+    _features_module = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_features_module)
+    FeatureExtractor = _features_module.FeatureExtractor
+    extract_features_for_task = _features_module.extract_features_for_task
 
     print("=== FLAIR Feature Engineering ===")
     return FeatureExtractor, Path, extract_features_for_task, pd, pl, sys, warnings
@@ -59,10 +79,21 @@ def _():
 
 @app.cell
 def _(Path):
-    # Configuration
-    CONFIG_PATH = "../../clif_config.json"
-    DATASETS_DIR = Path("../../outputs/datasets")
-    FEATURES_DIR = Path("../../outputs/features")
+    import os as _os
+
+    # Determine project root (works whether running from project root or notebooks dir)
+    _cwd = Path(_os.getcwd()).resolve()
+    if _cwd.name == 'notebooks':
+        PROJECT_ROOT = _cwd.parent.parent
+    elif _cwd.name == 'code':
+        PROJECT_ROOT = _cwd.parent
+    else:
+        PROJECT_ROOT = _cwd
+
+    # Configuration using absolute paths
+    CONFIG_PATH = str(PROJECT_ROOT / "clif_config.json")
+    DATASETS_DIR = PROJECT_ROOT / "outputs" / "datasets"
+    FEATURES_DIR = PROJECT_ROOT / "outputs" / "features"
     FEATURES_DIR.mkdir(parents=True, exist_ok=True)
 
     TASKS = [
@@ -72,10 +103,11 @@ def _(Path):
     ]
 
     print(f"Configuration:")
+    print(f"  Project root: {PROJECT_ROOT}")
     print(f"  CLIF config: {CONFIG_PATH}")
     print(f"  Datasets dir: {DATASETS_DIR}")
     print(f"  Features output dir: {FEATURES_DIR}")
-    return CONFIG_PATH, DATASETS_DIR, FEATURES_DIR, TASKS
+    return CONFIG_PATH, DATASETS_DIR, FEATURES_DIR, PROJECT_ROOT, TASKS
 
 
 @app.cell(hide_code=True)
@@ -89,18 +121,18 @@ def _(DATASETS_DIR, TASKS, pl):
     # Load task datasets
     task_datasets = {}
 
-    for task_name in TASKS:
-        dataset_path = DATASETS_DIR / f"{task_name}.parquet"
-        if dataset_path.exists():
-            df = pl.read_parquet(dataset_path)
-            task_datasets[task_name] = df
-            print(f"Loaded {task_name}: {df.shape}")
+    for _task_name in TASKS:
+        _dataset_path = DATASETS_DIR / f"{_task_name}.parquet"
+        if _dataset_path.exists():
+            _df = pl.read_parquet(_dataset_path)
+            task_datasets[_task_name] = _df
+            print(f"Loaded {_task_name}: {_df.shape}")
         else:
-            print(f"WARNING: {task_name} dataset not found at {dataset_path}")
+            print(f"WARNING: {_task_name} dataset not found at {_dataset_path}")
             print("  Please run 01_task_generator.py first")
 
     print(f"\nLoaded {len(task_datasets)} task datasets")
-    return dataset_path, df, task_datasets, task_name
+    return (task_datasets,)
 
 
 @app.cell(hide_code=True)
@@ -114,31 +146,25 @@ def _(CONFIG_PATH, FEATURES_DIR, extract_features_for_task, pd, task_datasets):
     # Extract features for each task
     task_features = {}
 
-    for task_name, task_df in task_datasets.items():
+    for _task_name, _task_df in task_datasets.items():
         print(f"\n{'='*60}")
-        print(f"Extracting features for {task_name}...")
+        print(f"Extracting features for {_task_name}...")
         print(f"{'='*60}")
 
         try:
             # Convert to pandas for feature extraction
-            task_pandas = task_df.to_pandas()
+            _task_pandas = _task_df.to_pandas()
 
             # Extract features
-            features_df = extract_features_for_task(
+            _features_df = extract_features_for_task(
                 config_path=CONFIG_PATH,
-                task_dataset=task_pandas,
+                task_dataset=_task_pandas,
                 time_col_start='window_start',
                 time_col_end='window_end'
             )
 
-            task_features[task_name] = features_df
-
-            # Save features
-            output_path = FEATURES_DIR / f"{task_name}_features.parquet"
-            features_df.to_parquet(output_path, index=False)
-
-            print(f"  Features shape: {features_df.shape}")
-            print(f"  Saved to: {output_path}")
+            task_features[_task_name] = _features_df
+            print(f"  Features shape: {_features_df.shape}")
 
         except Exception as e:
             print(f"  ERROR: {e}")
@@ -148,7 +174,7 @@ def _(CONFIG_PATH, FEATURES_DIR, extract_features_for_task, pd, task_datasets):
     print(f"\n{'='*60}")
     print(f"Feature extraction complete!")
     print(f"{'='*60}")
-    return features_df, output_path, task_features, task_name, task_pandas
+    return (task_features,)
 
 
 @app.cell(hide_code=True)
@@ -163,40 +189,40 @@ def _(FEATURES_DIR, pd, task_datasets, task_features):
     final_datasets = {}
 
     # Define label columns for each task
-    label_cols = {
+    _label_cols = {
         'task5_icu_los': 'icu_los_hours',
         'task6_hospital_mortality': 'label_mortality',
         'task7_icu_readmission': 'label_icu_readmission'
     }
 
-    for task_name, features_df in task_features.items():
-        print(f"\nMerging {task_name}...")
+    for _task_name, _features_df in task_features.items():
+        print(f"\nMerging {_task_name}...")
 
         # Get original task dataset with labels
-        task_df = task_datasets[task_name].to_pandas()
-        label_col = label_cols.get(task_name)
+        _task_df = task_datasets[_task_name].to_pandas()
+        _label_col = _label_cols.get(_task_name)
 
         # Columns to keep from task dataset
-        keep_cols = ['hospitalization_id', 'split']
-        if label_col and label_col in task_df.columns:
-            keep_cols.append(label_col)
+        _keep_cols = ['hospitalization_id', 'split']
+        if _label_col and _label_col in _task_df.columns:
+            _keep_cols.append(_label_col)
 
         # Merge features with labels
-        labels_df = task_df[keep_cols].drop_duplicates()
-        merged_df = pd.merge(features_df, labels_df, on='hospitalization_id', how='inner')
+        _labels_df = _task_df[_keep_cols].drop_duplicates()
+        _merged_df = pd.merge(_features_df, _labels_df, on='hospitalization_id', how='inner')
 
-        final_datasets[task_name] = merged_df
+        final_datasets[_task_name] = _merged_df
 
         # Save final dataset
-        output_path = FEATURES_DIR / f"{task_name}_final.parquet"
-        merged_df.to_parquet(output_path, index=False)
+        _output_path = FEATURES_DIR / f"{_task_name}_final.parquet"
+        _merged_df.to_parquet(_output_path, index=False)
 
-        print(f"  Final shape: {merged_df.shape}")
-        print(f"  Train: {len(merged_df[merged_df['split'] == 'train'])}")
-        print(f"  Test: {len(merged_df[merged_df['split'] == 'test'])}")
-        print(f"  Saved to: {output_path}")
+        print(f"  Final shape: {_merged_df.shape}")
+        print(f"  Train: {len(_merged_df[_merged_df['split'] == 'train'])}")
+        print(f"  Test: {len(_merged_df[_merged_df['split'] == 'test'])}")
+        print(f"  Saved to: {_output_path}")
 
-    return final_datasets, keep_cols, label_col, label_cols, labels_df, merged_df, output_path, task_df, task_name
+    return (final_datasets,)
 
 
 @app.cell(hide_code=True)
@@ -208,29 +234,29 @@ def _(mo):
 @app.cell
 def _(final_datasets, pd):
     # Display feature summary
-    for task_name, df in final_datasets.items():
-        print(f"\n=== {task_name} ===")
-        print(f"Shape: {df.shape}")
+    for _task_name, _df in final_datasets.items():
+        print(f"\n=== {_task_name} ===")
+        print(f"Shape: {_df.shape}")
 
         # Feature columns (exclude ID, split, label)
-        exclude = ['hospitalization_id', 'split', 'icu_los_hours', 'label_mortality', 'label_icu_readmission']
-        feature_cols = [c for c in df.columns if c not in exclude]
-        print(f"Feature columns: {len(feature_cols)}")
+        _exclude = ['hospitalization_id', 'split', 'icu_los_hours', 'label_mortality', 'label_icu_readmission']
+        _feature_cols = [c for c in _df.columns if c not in _exclude]
+        print(f"Feature columns: {len(_feature_cols)}")
 
         # Missing value summary
-        missing = df[feature_cols].isnull().sum()
-        missing_pct = (missing / len(df) * 100).round(1)
-        high_missing = missing_pct[missing_pct > 50]
-        if len(high_missing) > 0:
-            print(f"High missing (>50%): {list(high_missing.index)}")
+        _missing = _df[_feature_cols].isnull().sum()
+        _missing_pct = (_missing / len(_df) * 100).round(1)
+        _high_missing = _missing_pct[_missing_pct > 50]
+        if len(_high_missing) > 0:
+            print(f"High missing (>50%): {list(_high_missing.index)}")
 
         print(f"\nFeature list:")
-        for i, col in enumerate(feature_cols[:20]):
-            print(f"  {i+1}. {col}")
-        if len(feature_cols) > 20:
-            print(f"  ... and {len(feature_cols) - 20} more")
+        for _i, _col in enumerate(_feature_cols[:20]):
+            print(f"  {_i+1}. {_col}")
+        if len(_feature_cols) > 20:
+            print(f"  ... and {len(_feature_cols) - 20} more")
 
-    return col, df, exclude, feature_cols, high_missing, i, missing, missing_pct, task_name
+    return
 
 
 @app.cell(hide_code=True)

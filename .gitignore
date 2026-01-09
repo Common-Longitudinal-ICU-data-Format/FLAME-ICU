@@ -44,3 +44,5 @@ PHASE1_RESULTS_UPLOAD_ME/
 FLAME/
 outputs/
 clif_config.json
+rush_models/
+results_to_box/
