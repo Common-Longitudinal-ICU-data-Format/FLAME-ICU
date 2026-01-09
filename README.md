@@ -51,7 +51,11 @@ uv sync
 uv pip install -e ./FLAIR
 ```
 
-### 4. Configure
+### 4. Download Rush models
+
+Download the `rush_models/` folder from the CLIF BOX FLAME folder (link shared privately) and place it in the FLAME-ICU root directory.
+
+### 5. Configure
 
 Make sure your `clif_config.json` file is properly renamed and updated with site paths and timezone.
 
