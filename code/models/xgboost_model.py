@@ -12,8 +12,8 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 
 
-# Task-specific optimized parameters (from Optuna, 50 trials, 3-fold CV)
-TASK5_PARAMS = {  # ICU LOS (regression), R²=0.183
+# Task-specific optimized parameters
+TASK5_PARAMS = {  # ICU LOS (regression) - Optuna optimized, R²=0.183
     'eta': 0.011917525645112448,
     'max_depth': 8,
     'min_child_weight': 19,
@@ -27,7 +27,23 @@ TASK5_PARAMS = {  # ICU LOS (regression), R²=0.183
     'early_stopping_rounds': 20,
 }
 
-TASK7_PARAMS = {  # ICU Readmission (classification), AUROC=0.654
+TASK6_PARAMS = {  # Hospital Mortality (classification) - Original tuned params
+    'eta': 0.06057610120076962,
+    'max_depth': 8,
+    'min_child_weight': 6,
+    'max_delta_step': 0,
+    'subsample': 0.9274884839441507,
+    'colsample_bytree': 0.9225204370066138,
+    'gamma': 0.1652835907230118,
+    'reg_alpha': 8.404509395484988,
+    'reg_lambda': 0.10842839237042663,
+    'seed': 42,
+    'num_rounds': 500,
+    'early_stopping_rounds': 20,
+    'use_class_weights': True,
+}
+
+TASK7_PARAMS = {  # ICU Readmission (classification) - Optuna optimized, AUROC=0.654
     'eta': 0.012651716027478195,
     'max_depth': 4,
     'min_child_weight': 9,
