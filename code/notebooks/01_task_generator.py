@@ -193,6 +193,11 @@ def _(results):
             print(f"Shape: {_df.shape}")
             print(f"Columns: {_df.columns}")
 
+            # Check for empty dataframe
+            if len(_df) == 0:
+                print("\n  WARNING: Dataset is empty! Check date ranges and data directory.")
+                continue
+
             # Get label column (varies by task)
             if "icu_los_hours" in _df.columns:
                 _label_col = "icu_los_hours"

@@ -29,7 +29,7 @@ dependencies = [
     "scipy",
     "seaborn",
     "tqdm",
-    "clifpy",
+    "clifpy>=0.3.6",
     "torch",
     "xgboost",
     "scikit-learn",

@@ -2,32 +2,35 @@
 
 Complete step-by-step guide for running the FLAIR benchmark using FLAME-ICU.
 
----
+------------------------------------------------------------------------
 
 ## Table of Contents
 
-1. [Prerequisites](#1-prerequisites)
-2. [Installation](#2-installation)
-3. [Configuration](#3-configuration)
-4. [Step 1: Generate Task Datasets](#step-1-generate-task-datasets)
-5. [Step 2: Feature Engineering](#step-2-feature-engineering)
-6. [Step 3: Train & Evaluate Models](#step-3-train--evaluate-models)
-7. [Output Structure](#output-structure)
-8. [Uploading to BOX](#uploading-to-box)
+1.  [Prerequisites](#1-prerequisites)
+2.  [Installation](#2-installation)
+3.  [Configuration](#3-configuration)
+4.  [Step 1: Generate Task Datasets](#step-1-generate-task-datasets)
+5.  [Step 2: Feature Engineering](#step-2-feature-engineering)
+6.  [Step 2b: Generate Table 1](#step-2b-generate-table-1-optional)
+7.  [Step 3: Train & Evaluate Models](#step-3-train--evaluate-models)
+8.  [Output Structure](#output-structure)
+9.  [Uploading to BOX](#uploading-to-box)
 
----
+------------------------------------------------------------------------
 
 ## 1. Prerequisites
 
 ### Install UV Package Manager
 
 **Mac/Linux:**
-```bash
+
+``` bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 **Windows (PowerShell):**
-```powershell
+
+``` powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
@@ -36,7 +39,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 Ensure you have CLIF-formatted parquet files with these tables:
 
 | Table | Required Columns |
-|-------|------------------|
+|---------------------|---------------------------------------------------|
 | hospitalization | All |
 | patient | All |
 | adt | All (location_category) |
@@ -46,13 +49,13 @@ Ensure you have CLIF-formatted parquet files with these tables:
 | medication_admin_continuous | All (vasopressors) |
 | respiratory_support | All (device_category, fio2_set, peep_set) |
 
----
+------------------------------------------------------------------------
 
 ## 2. Installation
 
 ### Step 1: Clone the Repository
 
-```bash
+``` bash
 git clone <repository-url>
 cd FLAME-ICU
 ```
@@ -60,12 +63,14 @@ cd FLAME-ICU
 ### Step 2: Install FLAIR Library
 
 > **Note:** FLAIR is currently in development. Soon it will be available via PyPI:
-> ```bash
+>
+> ``` bash
 > uv pip install flair-benchmark  # Coming soon!
 > ```
 
 **Current installation (from local source):**
-```bash
+
+``` bash
 cd FLAIR
 uv pip install -e .
 cd ..
@@ -73,30 +78,30 @@ cd ..
 
 ### Step 3: Install Project Dependencies
 
-```bash
+``` bash
 uv sync
 ```
 
 ### Verify Installation
 
-```bash
+``` bash
 uv run python -c "from flair import generate_task_dataset; print('FLAIR OK')"
 uv run python -c "from code.models import XGBoostModel; print('Models OK')"
 ```
 
----
+------------------------------------------------------------------------
 
 ## 3. Configuration
 
 ### Create Configuration File
 
-```bash
+``` bash
 cp clif_config_template.json clif_config.json
 ```
 
 ### Edit `clif_config.json`
 
-```json
+``` json
 {
     "site": "your_site_name",
     "data_directory": "/path/to/your/clif/parquet/files",
@@ -105,37 +110,27 @@ cp clif_config_template.json clif_config.json
 }
 ```
 
-**Site Names:**
-- `"rush"` - Rush University (trains baseline models)
-- `"mimic"` - MIMIC-IV (uses built-in splits)
-- `"site_a"`, `"site_b"`, etc. - Other consortium sites
+**Site Names:** - `"rush"` - Rush University (trains baseline models) - `"mimic"` - MIMIC-IV (uses built-in splits) - `"site_a"`, `"site_b"`, etc. - Other consortium sites
 
-**Timezone Examples:**
-- `"US/Central"` - Chicago
-- `"US/Eastern"` - New York
-- `"US/Pacific"` - Los Angeles
+**Timezone Examples:** - `"US/Central"` - Chicago - `"US/Eastern"` - New York - `"US/Pacific"` - Los Angeles
 
----
+------------------------------------------------------------------------
 
-## Step 1: Generate Task Datasets
+## Step 1: Generate Task Datasets {#step-1-generate-task-datasets}
 
 This step uses FLAIR's `generate_task_dataset()` function to create cohorts and labels.
 
 ### Run Notebook 01
 
 **Interactive mode (recommended for first run):**
-```bash
-uv run marimo edit code/notebooks/01_task_generator.py
-```
 
-**Headless mode:**
-```bash
-uv run marimo run code/notebooks/01_task_generator.py
+``` bash
+uv run marimo edit code/notebooks/01_task_generator.py
 ```
 
 ### What FLAIR Does
 
-```python
+``` python
 from flair import generate_task_dataset
 
 # Example: Generate Task 6 (Hospital Mortality)
@@ -152,36 +147,31 @@ df = generate_task_dataset(
 
 ### Output
 
-```
+```         
 outputs/datasets/
 ├── task5_icu_los.parquet
 ├── task6_hospital_mortality.parquet
 └── task7_icu_readmission.parquet
 ```
 
-Each file contains:
-- `hospitalization_id` - Patient identifier
-- `split` - "train" or "test"
-- `window_start` - Feature collection start (ICU admission)
-- `window_end` - Prediction time
-- Task-specific label column
+Each file contains: - `hospitalization_id` - Patient identifier - `split` - "train" or "test" - `window_start` - Feature collection start (ICU admission) - `window_end` - Prediction time - Task-specific label column
 
----
+------------------------------------------------------------------------
 
-## Step 2: Feature Engineering
+## Step 2: Feature Engineering {#step-2-feature-engineering}
 
 Extract clinical features from CLIF tables using clifpy.
 
 ### Run Notebook 02
 
-```bash
+``` bash
 uv run marimo edit code/notebooks/02_feature_engineering.py
 ```
 
 ### Features Extracted
 
 | Category | Features |
-|----------|----------|
+|------------------------------------|------------------------------------|
 | Vitals | heart_rate, map, sbp, respiratory_rate, spo2, temp_c |
 | Labs | albumin, alt, ast, bicarbonate, bilirubin, bun, chloride, creatinine, inr, lactate, platelet_count, po2_arterial, potassium, pt, ptt, sodium, wbc |
 | Respiratory | device_category (one-hot), fio2_set, peep_set |
@@ -190,14 +180,53 @@ uv run marimo edit code/notebooks/02_feature_engineering.py
 
 ### Output
 
-```
+```         
 outputs/features/
 ├── task5_icu_los_final.parquet
 ├── task6_hospital_mortality_final.parquet
 └── task7_icu_readmission_final.parquet
 ```
 
----
+------------------------------------------------------------------------
+
+## Step 2b: Generate Table 1 (Optional)
+
+Generate summary statistics tables for each task cohort.
+
+### Run Notebook 02b
+
+``` bash
+uv run marimo edit code/notebooks/02b_table_one.py
+```
+
+Or headless:
+
+``` bash
+uv run python code/notebooks/02b_table_one.py
+```
+
+### What It Generates
+
+- **N hospitalizations** (total, train, test)
+- **Demographics**: age, sex, race, ethnicity (dynamically discovered from data)
+- **Clinical features**: vitals, labs, respiratory support, medications
+- **Missing percentages** for every variable
+- **Label distribution** by train/test split
+
+### Output
+
+```
+results_to_box/
+├── table1_task5_icu_los_{site}.json
+├── table1_task5_icu_los_{site}.csv
+├── table1_task6_hospital_mortality_{site}.json
+├── table1_task6_hospital_mortality_{site}.csv
+├── table1_task7_icu_readmission_{site}.json
+├── table1_task7_icu_readmission_{site}.csv
+└── table1_all_tasks_{site}.json
+```
+
+------------------------------------------------------------------------
 
 ## Step 3: Train & Evaluate Models
 
@@ -207,7 +236,7 @@ The workflow differs based on your site.
 
 Rush trains the baseline models that other sites will evaluate.
 
-```bash
+``` bash
 # Task 5: ICU Length of Stay (Regression)
 uv run marimo edit code/notebooks/03a_task5_icu_los.py
 
@@ -219,7 +248,8 @@ uv run marimo edit code/notebooks/03c_task7_readmission.py
 ```
 
 **Output:**
-```
+
+```         
 rush_models/
 ├── task5_icu_los_xgboost.json
 ├── task5_icu_los_elasticnet.joblib
@@ -238,7 +268,7 @@ First, download Rush models from BOX and place in `rush_models/` folder.
 
 Then run the same notebooks:
 
-```bash
+``` bash
 uv run marimo edit code/notebooks/03a_task5_icu_los.py
 uv run marimo edit code/notebooks/03b_task6_mortality.py
 uv run marimo edit code/notebooks/03c_task7_readmission.py
@@ -247,14 +277,15 @@ uv run marimo edit code/notebooks/03c_task7_readmission.py
 **Four experiments run automatically:**
 
 | Experiment | Description |
-|------------|-------------|
+|-----------------------------------|-------------------------------------|
 | `01_rush_eval` | Evaluate Rush models directly on your test data |
 | `02_platt_scaling` | Rush models + Platt calibration using your train data |
 | `03_transfer_learning` | Fine-tune Rush models with your train data |
 | `04_independent` | Train models from scratch on your data |
 
 **Output:**
-```
+
+```         
 results_to_box/{your_site}/
 ├── task5_icu_los/
 │   ├── 01_rush_eval/
@@ -269,13 +300,13 @@ results_to_box/{your_site}/
     └── ... (same structure)
 ```
 
----
+------------------------------------------------------------------------
 
-## Output Structure
+## Output Structure {#output-structure}
 
 ### Complete Directory Layout
 
-```
+```         
 FLAME-ICU/
 ├── clif_config.json          # Your site configuration
 ├── outputs/
@@ -293,7 +324,7 @@ FLAME-ICU/
 
 ### Metrics JSON Structure
 
-```json
+``` json
 {
   "site": "your_site",
   "task": "task6_hospital_mortality",
@@ -311,31 +342,33 @@ FLAME-ICU/
 }
 ```
 
----
+------------------------------------------------------------------------
 
-## Uploading to BOX
+## Uploading to BOX {#uploading-to-box}
 
 ### Rush Site
 
 Upload the `rush_models/` folder to:
-```
+
+```         
 CLIF BOX / FLAME / rush_models/
 ```
 
 ### Other Sites
 
 Upload the `results_to_box/{your_site}/` folder to:
-```
+
+```         
 CLIF BOX / FLAME / {your_site}/
 ```
 
----
+------------------------------------------------------------------------
 
 ## Quick Reference
 
 ### All Commands
 
-```bash
+``` bash
 # Installation
 cd FLAIR && uv pip install -e . && cd ..
 uv sync
@@ -350,6 +383,9 @@ uv run marimo edit code/notebooks/01_task_generator.py
 # Step 2: Feature engineering
 uv run marimo edit code/notebooks/02_feature_engineering.py
 
+# Step 2b: Generate Table 1 (optional)
+uv run python code/notebooks/02b_table_one.py
+
 # Step 3: Train/evaluate (run all 3)
 uv run marimo edit code/notebooks/03a_task5_icu_los.py
 uv run marimo edit code/notebooks/03b_task6_mortality.py
@@ -358,9 +394,10 @@ uv run marimo edit code/notebooks/03c_task7_readmission.py
 
 ### Headless Execution (All Steps)
 
-```bash
+``` bash
 uv run marimo run code/notebooks/01_task_generator.py
 uv run marimo run code/notebooks/02_feature_engineering.py
+uv run python code/notebooks/02b_table_one.py
 uv run marimo run code/notebooks/03a_task5_icu_los.py
 uv run marimo run code/notebooks/03b_task6_mortality.py
 uv run marimo run code/notebooks/03c_task7_readmission.py
@@ -368,21 +405,23 @@ uv run marimo run code/notebooks/03c_task7_readmission.py
 
 ### With Logging
 
-```bash
+``` bash
 mkdir -p logs
 uv run marimo run code/notebooks/01_task_generator.py 2>&1 | tee logs/01_tasks.log
 uv run marimo run code/notebooks/02_feature_engineering.py 2>&1 | tee logs/02_features.log
+uv run python code/notebooks/02b_table_one.py 2>&1 | tee logs/02b_table1.log
 uv run marimo run code/notebooks/03b_task6_mortality.py 2>&1 | tee logs/03b_mortality.log
 ```
 
----
+------------------------------------------------------------------------
 
 ## Troubleshooting
 
 ### Module Import Errors
 
 Use interactive mode to debug:
-```bash
+
+``` bash
 uv run marimo edit code/notebooks/01_task_generator.py
 ```
 
@@ -393,7 +432,8 @@ Check your `clif_config.json` data_directory path and verify required tables exi
 ### Site Detection Issues
 
 The notebooks detect your site from config:
-```python
+
+``` python
 SITE_NAME = config["site"]  # from clif_config.json
 IS_RUSH = SITE_NAME.lower() == "rush"
 IS_MIMIC = SITE_NAME.lower() == "mimic"

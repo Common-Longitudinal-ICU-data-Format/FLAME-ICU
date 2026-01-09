@@ -561,7 +561,7 @@ def plot_calibration_curve(
     output_path: str,
     title: str = "Calibration Curve",
     n_bins: int = 10,
-    figsize: Tuple[int, int] = (8, 8)
+    figsize: Tuple[int, int] = (10, 8)
 ) -> str:
     """
     Create and save calibration curve plot with binned calibration.
@@ -591,7 +591,7 @@ def plot_calibration_curve(
     fig, ax = plt.subplots(figsize=figsize)
 
     # Perfect calibration line
-    ax.plot([0, 1], [0, 1], 'k--', lw=1.5, label='Perfect Calibration')
+    ax.plot([0, 1], [0, 1], 'k--', alpha=0.5, linewidth=1, label='Perfect Calibration')
 
     # Binned calibration points
     ax.plot(mean_predicted_value, fraction_of_positives, 's-',
@@ -602,12 +602,12 @@ def plot_calibration_curve(
     ax.set_xlabel('Mean Predicted Probability', fontsize=12)
     ax.set_ylabel('Fraction of Positives', fontsize=12)
     ax.set_title(title, fontsize=14, fontweight='bold')
-    ax.legend(loc='lower right')
+    ax.legend(loc='lower right', fontsize=11)
     ax.grid(alpha=0.3)
 
     plt.tight_layout()
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
     return output_path
