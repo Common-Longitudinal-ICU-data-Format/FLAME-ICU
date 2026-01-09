@@ -39,7 +39,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 Ensure you have CLIF-formatted parquet files with these tables:
 
 | Table | Required Columns |
-|---------------------|---------------------------------------------------|
+|----------------------|--------------------------------------------------|
 | hospitalization | All |
 | patient | All |
 | adt | All (location_category) |
@@ -60,7 +60,9 @@ git clone <repository-url>
 cd FLAME-ICU
 ```
 
-### Step 2: Install FLAIR Library
+### Step 2: Clone and Install FLAIR Library
+
+FLAIR is a separate repository that must be cloned into the FLAME-ICU directory.
 
 > **Note:** FLAIR is currently in development. Soon it will be available via PyPI:
 >
@@ -68,9 +70,10 @@ cd FLAME-ICU
 > uv pip install flair-benchmark  # Coming soon!
 > ```
 
-**Current installation (from local source):**
+**Current installation (clone from GitHub):**
 
 ``` bash
+git clone https://github.com/Common-Longitudinal-ICU-data-Format/FLAIR.git
 cd FLAIR
 uv pip install -e .
 cd ..
@@ -189,7 +192,7 @@ outputs/features/
 
 ------------------------------------------------------------------------
 
-## Step 2b: Generate Table 1 (Optional)
+## Step 2b: Generate Table 1 (Optional) {#step-2b-generate-table-1-optional}
 
 Generate summary statistics tables for each task cohort.
 
@@ -207,15 +210,15 @@ uv run python code/notebooks/02b_table_one.py
 
 ### What It Generates
 
-- **N hospitalizations** (total, train, test)
-- **Demographics**: age, sex, race, ethnicity (dynamically discovered from data)
-- **Clinical features**: vitals, labs, respiratory support, medications
-- **Missing percentages** for every variable
-- **Label distribution** by train/test split
+-   **N hospitalizations** (total, train, test)
+-   **Demographics**: age, sex, race, ethnicity (dynamically discovered from data)
+-   **Clinical features**: vitals, labs, respiratory support, medications
+-   **Missing percentages** for every variable
+-   **Label distribution** by train/test split
 
 ### Output
 
-```
+```         
 results_to_box/
 ├── table1_task5_icu_los_{site}.json
 ├── table1_task5_icu_los_{site}.csv
@@ -370,6 +373,7 @@ CLIF BOX / FLAME / {your_site}/
 
 ``` bash
 # Installation
+git clone https://github.com/Common-Longitudinal-ICU-data-Format/FLAIR.git
 cd FLAIR && uv pip install -e . && cd ..
 uv sync
 
