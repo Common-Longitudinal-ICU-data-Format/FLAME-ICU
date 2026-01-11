@@ -39,7 +39,7 @@ def _(mo):
 
 @app.cell
 def _():
-    from flair import generate_task_dataset, TASK_REGISTRY, FLAIRCohortBuilder
+    from flair_benchmark import generate_task_dataset, TASK_REGISTRY, FLAIRCohortBuilder
     from pathlib import Path
     import polars as pl
     import json

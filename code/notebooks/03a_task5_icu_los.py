@@ -290,9 +290,16 @@ def _(
         # NON-RUSH SITE: Run 3 experiments
         # ============================================================
 
-        # Create output directory
+        # Create output directory with experiment subfolders
         _output_dir = RESULTS_DIR / SITE_NAME / TASK_NAME
         _output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create experiment subfolders (matching Task 6/7 structure)
+        _rush_eval_dir = _output_dir / "01_rush_eval"
+        _transfer_dir = _output_dir / "02_transfer_learning"
+        _indep_dir = _output_dir / "03_independent"
+        for _d in [_rush_eval_dir, _transfer_dir, _indep_dir]:
+            _d.mkdir(parents=True, exist_ok=True)
 
         _evaluator = TaskEvaluator(TASK_TYPE)
         _experiments_results = {}
@@ -336,20 +343,20 @@ def _(
                 }
             }
 
-            # Save results
-            with open(_output_dir / "rush_eval_metrics.json", 'w') as _f:
+            # Save results to subfolder
+            with open(_rush_eval_dir / "metrics.json", 'w') as _f:
                 json.dump(_experiments_results['rush_eval'], _f, indent=2)
-            print(f"Saved: {_output_dir / 'rush_eval_metrics.json'}")
+            print(f"Saved: {_rush_eval_dir / 'metrics.json'}")
 
             # Plot predicted vs observed
             plot_predicted_vs_observed(
                 y_test, _y_pred_rush_xgb,
-                str(_output_dir / "rush_xgboost_pred_vs_obs.png"),
+                str(_rush_eval_dir / "xgboost_pred_vs_obs.png"),
                 title="Rush XGBoost: Predicted vs Observed ICU LOS"
             )
             plot_predicted_vs_observed(
                 y_test, _y_pred_rush_en,
-                str(_output_dir / "rush_elasticnet_pred_vs_obs.png"),
+                str(_rush_eval_dir / "elasticnet_pred_vs_obs.png"),
                 title="Rush ElasticNet: Predicted vs Observed ICU LOS"
             )
 
@@ -375,8 +382,8 @@ def _(
             _ci_transfer_xgb = _evaluator.compute_bootstrap_ci(y_test, _y_pred_transfer_xgb, n_iterations=1000)
             print_metrics(_metrics_transfer_xgb, "Transfer XGBoost on Local Test")
 
-            # Save transfer model
-            _transfer_xgb.save(str(_output_dir / "transfer_xgboost.json"))
+            # Save transfer model to subfolder
+            _transfer_xgb.save(str(_transfer_dir / "xgboost.json"))
 
             # ElasticNet transfer: Use Rush preprocessing, retrain on local data
             _rush_en_loaded = ElasticNetModel(task_type=TASK_TYPE).load(str(_rush_en_path))
@@ -389,8 +396,8 @@ def _(
             _ci_transfer_en = _evaluator.compute_bootstrap_ci(y_test, _y_pred_transfer_en, n_iterations=1000)
             print_metrics(_metrics_transfer_en, "Transfer ElasticNet on Local Test")
 
-            # Save transfer model
-            _transfer_en.save(str(_output_dir / "transfer_elasticnet.joblib"))
+            # Save transfer model to subfolder
+            _transfer_en.save(str(_transfer_dir / "elasticnet.joblib"))
 
             _experiments_results['transfer_learning'] = {
                 "site": SITE_NAME,
@@ -405,19 +412,19 @@ def _(
                 }
             }
 
-            with open(_output_dir / "transfer_learning_metrics.json", 'w') as _f:
+            with open(_transfer_dir / "metrics.json", 'w') as _f:
                 json.dump(_experiments_results['transfer_learning'], _f, indent=2)
-            print(f"Saved: {_output_dir / 'transfer_learning_metrics.json'}")
+            print(f"Saved: {_transfer_dir / 'metrics.json'}")
 
             # Plot predicted vs observed
             plot_predicted_vs_observed(
                 y_test, _y_pred_transfer_xgb,
-                str(_output_dir / "transfer_xgboost_pred_vs_obs.png"),
+                str(_transfer_dir / "xgboost_pred_vs_obs.png"),
                 title="Transfer XGBoost: Predicted vs Observed ICU LOS"
             )
             plot_predicted_vs_observed(
                 y_test, _y_pred_transfer_en,
-                str(_output_dir / "transfer_elasticnet_pred_vs_obs.png"),
+                str(_transfer_dir / "elasticnet_pred_vs_obs.png"),
                 title="Transfer ElasticNet: Predicted vs Observed ICU LOS"
             )
 
@@ -440,7 +447,7 @@ def _(
         _ci_indep_xgb = _evaluator.compute_bootstrap_ci(y_test, _y_pred_indep_xgb, n_iterations=1000)
         print_metrics(_metrics_indep_xgb, "Independent XGBoost on Local Test")
 
-        _indep_xgb.save(str(_output_dir / "independent_xgboost.json"))
+        _indep_xgb.save(str(_indep_dir / "xgboost.json"))
 
         # Train ElasticNet from scratch
         _indep_en = ElasticNetModel(task_type=TASK_TYPE)
@@ -451,7 +458,7 @@ def _(
         _ci_indep_en = _evaluator.compute_bootstrap_ci(y_test, _y_pred_indep_en, n_iterations=1000)
         print_metrics(_metrics_indep_en, "Independent ElasticNet on Local Test")
 
-        _indep_en.save(str(_output_dir / "independent_elasticnet.joblib"))
+        _indep_en.save(str(_indep_dir / "elasticnet.joblib"))
 
         _experiments_results['independent'] = {
             "site": SITE_NAME,
@@ -466,19 +473,19 @@ def _(
             }
         }
 
-        with open(_output_dir / "independent_metrics.json", 'w') as _f:
+        with open(_indep_dir / "metrics.json", 'w') as _f:
             json.dump(_experiments_results['independent'], _f, indent=2)
-        print(f"Saved: {_output_dir / 'independent_metrics.json'}")
+        print(f"Saved: {_indep_dir / 'metrics.json'}")
 
         # Plot predicted vs observed
         plot_predicted_vs_observed(
             y_test, _y_pred_indep_xgb,
-            str(_output_dir / "independent_xgboost_pred_vs_obs.png"),
+            str(_indep_dir / "xgboost_pred_vs_obs.png"),
             title="Independent XGBoost: Predicted vs Observed ICU LOS"
         )
         plot_predicted_vs_observed(
             y_test, _y_pred_indep_en,
-            str(_output_dir / "independent_elasticnet_pred_vs_obs.png"),
+            str(_indep_dir / "elasticnet_pred_vs_obs.png"),
             title="Independent ElasticNet: Predicted vs Observed ICU LOS"
         )
 
@@ -499,8 +506,8 @@ def _(mo):
 
 
 @app.cell
-def _(IS_RUSH, SITE_NAME, TASK_NAME, all_results, pd):
-    # Create summary table
+def _(IS_RUSH, RESULTS_DIR, SITE_NAME, TASK_NAME, all_results, pd):
+    # Create summary table and save to CSV
     if all_results:
         _rows = []
         for _exp_name, _exp_data in all_results.items():
@@ -512,7 +519,7 @@ def _(IS_RUSH, SITE_NAME, TASK_NAME, all_results, pd):
                     }
                     for _metric, _values in _model_metrics.items():
                         if isinstance(_values, dict) and 'mean' in _values:
-                            _row[_metric] = f"{_values['mean']:.3f} [{_values['ci_lower']:.3f}-{_values['ci_upper']:.3f}]"
+                            _row[_metric] = f"{_values['mean']:.4f} [{_values['ci_lower']:.4f}-{_values['ci_upper']:.4f}]"
                         else:
                             _row[_metric] = _values
                     _rows.append(_row)
@@ -520,6 +527,13 @@ def _(IS_RUSH, SITE_NAME, TASK_NAME, all_results, pd):
         summary_df = pd.DataFrame(_rows)
         print(f"\n=== Results Summary for {TASK_NAME} ({SITE_NAME}) ===")
         print(summary_df.to_string(index=False))
+
+        # Save final summary metrics CSV (non-Rush sites only)
+        if not IS_RUSH:
+            _output_dir = RESULTS_DIR / SITE_NAME / TASK_NAME
+            _summary_path = _output_dir / "final_summary_metrics.csv"
+            summary_df.to_csv(_summary_path, index=False)
+            print(f"\nSaved: {_summary_path}")
     else:
         summary_df = None
         print("No results to display")

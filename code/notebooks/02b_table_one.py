@@ -248,7 +248,7 @@ def _():
         exclude = ['hospitalization_id', 'split', label_col]
 
         # Known categorical columns (demographics)
-        categorical = ['sex_category', 'race_category', 'ethnicity_category']
+        categorical = ['sex_category', 'race_category', 'ethnicity_category', 'hospital_type']
 
         # Binary device columns (detected dynamically)
         device_cols = [c for c in df_columns if c.startswith('device_')]

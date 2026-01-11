@@ -307,7 +307,7 @@ class FeatureExtractor:
         if isinstance(cohort_df, pl.DataFrame):
             cohort_df = cohort_df.to_pandas()
 
-        demo_cols = ['hospitalization_id', 'age_at_admission', 'sex_category', 'race_category', 'ethnicity_category']
+        demo_cols = ['hospitalization_id', 'age_at_admission', 'sex_category', 'race_category', 'ethnicity_category', 'hospital_type']
         available_cols = [c for c in demo_cols if c in cohort_df.columns]
 
         if len(available_cols) > 1:

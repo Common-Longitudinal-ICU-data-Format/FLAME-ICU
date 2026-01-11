@@ -741,8 +741,8 @@ def _(mo):
 
 
 @app.cell
-def _(IS_RUSH, SITE_NAME, TASK_NAME, all_results, pd):
-    # Create summary table
+def _(IS_RUSH, RESULTS_DIR, SITE_NAME, TASK_NAME, all_results, pd):
+    # Create summary table and save to CSV
     if all_results:
         _rows = []
         for _exp_name, _exp_data in all_results.items():
@@ -758,9 +758,9 @@ def _(IS_RUSH, SITE_NAME, TASK_NAME, all_results, pd):
                             continue
                         if isinstance(_values, dict) and 'mean' in _values:
                             if _values.get('ci_lower') is not None and _values.get('ci_upper') is not None:
-                                _row[_metric] = f"{_values['mean']:.3f} [{_values['ci_lower']:.3f}-{_values['ci_upper']:.3f}]"
+                                _row[_metric] = f"{_values['mean']:.4f} [{_values['ci_lower']:.4f}-{_values['ci_upper']:.4f}]"
                             else:
-                                _row[_metric] = f"{_values['mean']:.3f}"
+                                _row[_metric] = f"{_values['mean']:.4f}"
                         elif not isinstance(_values, (dict, list)):
                             _row[_metric] = _values
                     _rows.append(_row)
@@ -768,6 +768,13 @@ def _(IS_RUSH, SITE_NAME, TASK_NAME, all_results, pd):
         summary_df = pd.DataFrame(_rows)
         print(f"\n=== Results Summary for {TASK_NAME} ({SITE_NAME}) ===")
         print(summary_df.to_string(index=False))
+
+        # Save final summary metrics CSV (non-Rush sites only)
+        if not IS_RUSH:
+            _output_dir = RESULTS_DIR / SITE_NAME / TASK_NAME
+            _summary_path = _output_dir / "final_summary_metrics.csv"
+            summary_df.to_csv(_summary_path, index=False)
+            print(f"\nSaved: {_summary_path}")
     else:
         summary_df = None
         print("No results to display")
