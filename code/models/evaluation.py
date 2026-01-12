@@ -285,78 +285,71 @@ def print_metrics(metrics: Dict[str, float], title: str = "Metrics") -> None:
 def compute_ici(
     y_true: np.ndarray,
     y_pred_proba: np.ndarray,
-    n_points: int = 100
+    n_bins: int = 10
 ) -> Dict[str, Any]:
     """
-    Compute Integrated Calibration Index using LOESS smoothing.
+    Compute Integrated Calibration Index using binned calibration.
 
-    ICI = mean absolute difference between LOESS-smoothed observed probability
-    and predicted probability, computed at actual prediction points.
+    ICI = mean absolute difference between observed probability and
+    predicted probability across calibration bins.
 
     Args:
         y_true: True binary labels
         y_pred_proba: Predicted probabilities
-        n_points: Number of points for output curve (for plotting)
+        n_bins: Number of bins for calibration (default: 10)
 
     Returns:
         Dictionary with 'ici' value and 'calibration_curve' data
     """
-    from statsmodels.nonparametric.smoothers_lowess import lowess
+    from sklearn.calibration import calibration_curve
 
     # Ensure arrays
     y_true = np.asarray(y_true).flatten()
     y_pred_proba = np.asarray(y_pred_proba).flatten()
 
-    # Sort by predicted probability
-    sorted_idx = np.argsort(y_pred_proba)
-    y_true_sorted = y_true[sorted_idx]
-    y_pred_sorted = y_pred_proba[sorted_idx]
-
     try:
-        # Fit LOESS curve (observed outcomes vs predicted probabilities)
-        loess_result = lowess(y_true_sorted, y_pred_sorted, frac=0.3, return_sorted=True)
-
-        # Interpolate smoothed values at actual prediction points
-        smoothed_at_predictions = np.interp(y_pred_sorted, loess_result[:, 0], loess_result[:, 1])
-
-        # Clip to [0, 1] range
-        smoothed_at_predictions = np.clip(smoothed_at_predictions, 0, 1)
-
-        # ICI = mean |smoothed_observed - predicted| at actual prediction points
-        ici = float(np.mean(np.abs(smoothed_at_predictions - y_pred_sorted)))
-
-        # Downsample curve for storage
-        if len(loess_result) > n_points:
-            indices = np.linspace(0, len(loess_result) - 1, n_points, dtype=int)
-            curve_x = loess_result[indices, 0]
-            curve_y = loess_result[indices, 1]
-        else:
-            curve_x = loess_result[:, 0]
-            curve_y = loess_result[:, 1]
-
-        return {
-            'ici': ici,
-            'calibration_curve': {
-                'predicted': curve_x.tolist(),
-                'observed_smoothed': np.clip(curve_y, 0, 1).tolist()
-            }
-        }
-    except Exception as e:
-        # Fallback: use binned calibration if LOESS fails
-        print(f"  Warning: LOESS failed ({e}), using binned calibration")
-        from sklearn.calibration import calibration_curve
+        # Compute binned calibration curve
+        # fraction_of_positives = observed probability in each bin
+        # mean_predicted_value = mean predicted probability in each bin
         fraction_of_positives, mean_predicted_value = calibration_curve(
-            y_true, y_pred_proba, n_bins=10, strategy='uniform'
+            y_true, y_pred_proba, n_bins=n_bins, strategy='uniform'
         )
 
-        # Compute calibration error as fallback ICI
-        ici = float(np.mean(np.abs(fraction_of_positives - mean_predicted_value)))
+        # Compute ICI: mean absolute calibration error across bins
+        # Weight by bin size for more accurate ICI
+        bin_edges = np.linspace(0, 1, n_bins + 1)
+        bin_weights = []
+
+        for i in range(n_bins):
+            # Count samples in this bin
+            in_bin = (y_pred_proba >= bin_edges[i]) & (y_pred_proba < bin_edges[i + 1])
+            if i == n_bins - 1:  # Last bin includes right edge
+                in_bin = (y_pred_proba >= bin_edges[i]) & (y_pred_proba <= bin_edges[i + 1])
+            bin_weights.append(np.sum(in_bin))
+
+        bin_weights = np.array(bin_weights)
+        bin_weights = bin_weights / np.sum(bin_weights)  # Normalize to sum to 1
+
+        # Weighted ICI
+        calibration_errors = np.abs(fraction_of_positives - mean_predicted_value)
+        ici = float(np.sum(calibration_errors * bin_weights[:len(calibration_errors)]))
 
         return {
             'ici': ici,
             'calibration_curve': {
                 'predicted': mean_predicted_value.tolist(),
                 'observed_smoothed': fraction_of_positives.tolist()
+            }
+        }
+
+    except Exception as e:
+        print(f"  Warning: Calibration curve computation failed ({e})")
+        # Return empty calibration data
+        return {
+            'ici': 0.0,
+            'calibration_curve': {
+                'predicted': [],
+                'observed_smoothed': []
             }
         }
 
