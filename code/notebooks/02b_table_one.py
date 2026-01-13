@@ -42,10 +42,11 @@ def _():
     from pathlib import Path
 
     import polars as pl
+    import pandas as pd
     import numpy as np
 
     print("=== Table 1 Generator ===")
-    return Path, json, np, os, pl, sys
+    return Path, json, np, os, pd, pl, sys
 
 
 @app.cell
@@ -66,25 +67,30 @@ def _(Path, json, os):
     SITE_NAME = _config.get("site", "unknown")
 
     # Directories
+    DATASETS_DIR = PROJECT_ROOT / "outputs" / "datasets"
     FEATURES_DIR = PROJECT_ROOT / "outputs" / "features"
     RESULTS_DIR = PROJECT_ROOT / "results_to_box"
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH = str(_config_path)
 
     # Task configuration
     TASKS = {
         "task5_icu_los": {
+            "dataset_file": "task5_icu_los.parquet",
             "file": "task5_icu_los_final.parquet",
             "label_col": "icu_los_hours",
             "task_type": "regression",
             "description": "ICU Length of Stay (hours)"
         },
         "task6_hospital_mortality": {
+            "dataset_file": "task6_hospital_mortality.parquet",
             "file": "task6_hospital_mortality_final.parquet",
             "label_col": "label_mortality",
             "task_type": "classification",
             "description": "Hospital Mortality"
         },
         "task7_icu_readmission": {
+            "dataset_file": "task7_icu_readmission.parquet",
             "file": "task7_icu_readmission_final.parquet",
             "label_col": "label_icu_readmission",
             "task_type": "classification",
@@ -95,9 +101,10 @@ def _(Path, json, os):
     print(f"Configuration:")
     print(f"  Project root: {PROJECT_ROOT}")
     print(f"  Site name: {SITE_NAME}")
+    print(f"  Datasets dir: {DATASETS_DIR}")
     print(f"  Features dir: {FEATURES_DIR}")
     print(f"  Results dir: {RESULTS_DIR}")
-    return FEATURES_DIR, PROJECT_ROOT, RESULTS_DIR, SITE_NAME, TASKS
+    return CONFIG_PATH, DATASETS_DIR, FEATURES_DIR, PROJECT_ROOT, RESULTS_DIR, SITE_NAME, TASKS
 
 
 @app.cell(hide_code=True)
@@ -237,6 +244,168 @@ def _(get_binary_stats, get_continuous_stats, pl):
 
 
 @app.cell
+def _(Path, json, pd, pl):
+    def compute_sofa_for_cohort(
+        config_path: str,
+        cohort_df: pl.DataFrame,
+        time_col_start: str = 'window_start',
+        time_col_end: str = 'window_end'
+    ) -> pl.DataFrame:
+        """
+        Compute SOFA scores for a cohort using clifpy.
+
+        Args:
+            config_path: Path to clif_config.json
+            cohort_df: DataFrame with hospitalization_id, window_start, window_end
+            time_col_start: Column name for window start
+            time_col_end: Column name for window end
+
+        Returns:
+            DataFrame with hospitalization_id and SOFA scores (7 columns total)
+        """
+        from clifpy.clif_orchestrator import ClifOrchestrator
+        from clifpy.utils.sofa import REQUIRED_SOFA_CATEGORIES_BY_TABLE
+
+        print("Computing SOFA scores...")
+
+        # Convert to pandas for clifpy compatibility
+        if isinstance(cohort_df, pl.DataFrame):
+            cohort_pandas = cohort_df.to_pandas()
+        else:
+            cohort_pandas = cohort_df
+
+        # Load timezone from config
+        with open(config_path) as f:
+            config = json.load(f)
+        timezone = config["timezone"]
+
+        # Localize datetime columns for DST handling
+        for col in [time_col_start, time_col_end]:
+            if col in cohort_pandas.columns:
+                if pd.api.types.is_datetime64_any_dtype(cohort_pandas[col]):
+                    if cohort_pandas[col].dt.tz is None:
+                        cohort_pandas[col] = cohort_pandas[col].dt.tz_localize(
+                            timezone, ambiguous=True, nonexistent='shift_forward'
+                        )
+
+        # Initialize ClifOrchestrator
+        clif = ClifOrchestrator(config_path=config_path)
+
+        # Get cohort IDs
+        cohort_ids = cohort_pandas['hospitalization_id'].astype(str).unique().tolist()
+        print(f"  Loading CLIF data for {len(cohort_ids)} hospitalizations...")
+
+        # SOFA-required categories (from clifpy)
+        SOFA_CATEGORY_FILTERS = {
+            'vitals': ['map', 'spo2', 'weight_kg'],
+            'labs': ['creatinine', 'platelet_count', 'po2_arterial', 'bilirubin_total'],
+            'medication_admin_continuous': ['norepinephrine', 'epinephrine', 'dopamine', 'dobutamine'],
+            'respiratory_support': ['device_category', 'fio2_set'],
+            'patient_assessments': ['gcs_total']
+        }
+
+        # Load required tables
+        for table_name, categories in SOFA_CATEGORY_FILTERS.items():
+            filters_dict = {'hospitalization_id': cohort_ids}
+            if categories:
+                cat_col = {
+                    'vitals': 'vital_category',
+                    'labs': 'lab_category',
+                    'medication_admin_continuous': 'med_category',
+                    'patient_assessments': 'assessment_category'
+                }.get(table_name)
+
+                if cat_col:
+                    filters_dict[cat_col] = categories
+
+            try:
+                clif.load_table(table_name, filters=filters_dict)
+                print(f"    Loaded {table_name}")
+            except Exception as e:
+                print(f"    Warning: Could not load {table_name}: {e}")
+
+        # Clean and convert medication units
+        if hasattr(clif, 'medication_admin_continuous') and \
+           clif.medication_admin_continuous is not None and \
+           clif.medication_admin_continuous.df is not None:
+
+            med_df = clif.medication_admin_continuous.df.copy()
+            med_df = med_df[med_df['med_dose'].notna()]
+            med_df = med_df[med_df['med_dose_unit'].notna()]
+            clif.medication_admin_continuous.df = med_df
+
+            # Convert to mcg/kg/min
+            preferred_units = {
+                'norepinephrine': 'mcg/kg/min',
+                'epinephrine': 'mcg/kg/min',
+                'dopamine': 'mcg/kg/min',
+                'dobutamine': 'mcg/kg/min'
+            }
+
+            clif.convert_dose_units_for_continuous_meds(
+                preferred_units=preferred_units,
+                override=True
+            )
+
+            # Filter to successful conversions
+            if hasattr(clif.medication_admin_continuous, 'df_converted'):
+                med_converted = clif.medication_admin_continuous.df_converted
+                med_success = med_converted[med_converted['_convert_status'] == 'success'].copy()
+                clif.medication_admin_continuous.df_converted = med_success
+                print(f"    Converted {len(med_success)} medication doses")
+
+        # Prepare time filter for wide dataset
+        cohort_time_filter = cohort_pandas[['hospitalization_id', time_col_start, time_col_end]].copy()
+        cohort_time_filter.columns = ['hospitalization_id', 'start_time', 'end_time']
+
+        # Create wide dataset
+        print("  Creating wide dataset...")
+        clif.create_wide_dataset(
+            category_filters=SOFA_CATEGORY_FILTERS,
+            cohort_df=cohort_time_filter,
+            save_to_data_location=False,
+            batch_size=10000,
+            memory_limit='6GB',
+            show_progress=False
+        )
+
+        wide_df = clif.wide_df.copy()
+        print(f"    Wide dataset shape: {wide_df.shape}")
+
+        # Add missing medication columns if needed
+        required_med_cols = [
+            'norepinephrine_mcg_kg_min',
+            'epinephrine_mcg_kg_min',
+            'dopamine_mcg_kg_min',
+            'dobutamine_mcg_kg_min'
+        ]
+        for col in required_med_cols:
+            if col not in wide_df.columns:
+                wide_df[col] = None
+
+        # Compute SOFA scores
+        print("  Computing SOFA scores...")
+        sofa_scores = clif.compute_sofa_scores(
+            wide_df=wide_df,
+            id_name='hospitalization_id',
+            fill_na_scores_with_zero=True,
+            remove_outliers=True,
+            create_new_wide_df=False
+        )
+
+        print(f"  ✓ SOFA computed: {len(sofa_scores)} hospitalizations")
+        print(f"    Mean SOFA: {sofa_scores['sofa_total'].mean():.2f}")
+        print(f"    Median SOFA: {sofa_scores['sofa_total'].median():.2f}")
+
+        # Convert to Polars for consistency with rest of notebook
+        sofa_polars = pl.from_pandas(sofa_scores)
+
+        return sofa_polars
+
+    return (compute_sofa_for_cohort,)
+
+
+@app.cell
 def _():
     def classify_columns(df_columns: list, task_config: dict) -> dict:
         """
@@ -260,10 +429,13 @@ def _():
         # Age columns - treat as continuous
         age_cols = ['age_at_admission', 'age']
 
+        # SOFA columns - detect dynamically
+        sofa_cols = [c for c in df_columns if c.startswith('sofa_')]
+
         # Everything else is continuous clinical features
         continuous = []
         for c in df_columns:
-            if c not in exclude + categorical + device_cols + binary_cols + count_cols + age_cols:
+            if c not in exclude + categorical + device_cols + binary_cols + count_cols + age_cols + sofa_cols:
                 continuous.append(c)
 
         return {
@@ -274,6 +446,7 @@ def _():
             "count": [c for c in count_cols if c in df_columns],
             "age": [c for c in age_cols if c in df_columns],
             "continuous": continuous,
+            "sofa": sofa_cols,
             "label": label_col
         }
 
@@ -312,7 +485,8 @@ def _(classify_columns, get_binary_stats, get_categorical_stats, get_continuous_
                 "vitals": {},
                 "labs": {},
                 "respiratory": {},
-                "assessments": {}
+                "assessments": {},
+                "sofa": {}
             },
             "respiratory_devices": {},
             "medications": {},
@@ -347,6 +521,10 @@ def _(classify_columns, get_binary_stats, get_categorical_stats, get_continuous_
                 table1["clinical_features"]["respiratory"][col] = get_continuous_stats(df[col], col)
             elif col.startswith('gcs'):
                 table1["clinical_features"]["assessments"][col] = get_continuous_stats(df[col], col)
+
+        # === SOFA Scores (continuous) ===
+        for col in col_groups["sofa"]:
+            table1["clinical_features"]["sofa"][col] = get_continuous_stats(df[col], col)
 
         # === Respiratory Devices (Binary) ===
         for col in col_groups["device_binary"]:
@@ -508,31 +686,64 @@ def _():
 
 
 @app.cell
-def _(FEATURES_DIR, SITE_NAME, TASKS, generate_table1, pl):
+def _(CONFIG_PATH, DATASETS_DIR, FEATURES_DIR, SITE_NAME, TASKS, compute_sofa_for_cohort, generate_table1, pl):
     # Load datasets and generate Table 1 for each task
     all_tables = {}
 
     for _task_name, _config in TASKS.items():
-        _file_path = FEATURES_DIR / _config["file"]
+        _feature_path = FEATURES_DIR / _config["file"]
+        _dataset_path = DATASETS_DIR / _config["dataset_file"]
 
-        if _file_path.exists():
+        if _feature_path.exists() and _dataset_path.exists():
             print(f"\n{'='*60}")
             print(f"Processing: {_task_name}")
             print(f"{'='*60}")
 
-            _df = pl.read_parquet(_file_path)
-            print(f"  Loaded: {_df.shape[0]} rows, {_df.shape[1]} columns")
+            # Load feature dataset (has features + split + label)
+            _features_df = pl.read_parquet(_feature_path)
+            print(f"  Loaded features: {_features_df.shape[0]} rows, {_features_df.shape[1]} columns")
 
-            _table1 = generate_table1(_df, _task_name, _config, SITE_NAME)
+            # Load task dataset (has window_start, window_end)
+            _task_df = pl.read_parquet(_dataset_path)
+            print(f"  Loaded task dataset: {_task_df.shape[0]} rows, {_task_df.shape[1]} columns")
+
+            # Compute SOFA scores using window information
+            try:
+                _sofa_df = compute_sofa_for_cohort(
+                    config_path=CONFIG_PATH,
+                    cohort_df=_task_df,
+                    time_col_start='window_start',
+                    time_col_end='window_end'
+                )
+                print(f"  ✓ SOFA computed: {_sofa_df.shape[0]} rows, {_sofa_df.shape[1]} columns")
+
+                # Merge SOFA with features
+                _features_with_sofa = _features_df.join(
+                    _sofa_df,
+                    on='hospitalization_id',
+                    how='left'
+                )
+                print(f"  ✓ Merged SOFA with features: {_features_with_sofa.shape[1]} total columns")
+
+            except Exception as e:
+                print(f"  ⚠️  Warning: SOFA computation failed: {e}")
+                print(f"  Continuing without SOFA scores...")
+                _features_with_sofa = _features_df
+
+            # Generate Table 1
+            _table1 = generate_table1(_features_with_sofa, _task_name, _config, SITE_NAME)
             all_tables[_task_name] = _table1
 
-            print(f"  Generated Table 1 with {_table1['cohort_info']['n_hospitalizations']} hospitalizations")
+            print(f"  ✓ Generated Table 1 with {_table1['cohort_info']['n_hospitalizations']} hospitalizations")
             print(f"  Site: {_table1['site']}")
         else:
-            print(f"WARNING: {_file_path} not found")
-            print("  Please run 02_feature_engineering.py first")
+            if not _feature_path.exists():
+                print(f"WARNING: {_feature_path} not found")
+            if not _dataset_path.exists():
+                print(f"WARNING: {_dataset_path} not found")
+            print("  Please run 01_task_generator.py and 02_feature_engineering.py first")
 
-    print(f"\nGenerated Table 1 for {len(all_tables)} tasks")
+    print(f"\n✓ Generated Table 1 for {len(all_tables)} tasks")
     return (all_tables,)
 
 
